@@ -927,6 +927,7 @@ export default function Pos(props: PosProps = {}) {
       items: inv.items.map(item => ({ name: item.name, qty: item.qty, unit: item.selectedUnit, price: Number(item.basePrice) || 0, line_total: item.lineTotal })),
       subtotal: inv.subtotal,
       shipping: inv.shipping,
+      couponCode: inv.couponCode,
       couponDiscount: inv.couponDiscount,
       manualDiscount: inv.manualDiscountAmount,
       totalGst: inv.gstAmount,
@@ -1610,6 +1611,20 @@ export default function Pos(props: PosProps = {}) {
                   <span className="text-[11px] font-black text-[#374151]">Subtotal ({items.length} items)</span>
                   <span className="text-[12px] font-black text-[#111111]">{formatCurrency(subtotal)}</span>
                 </div>
+
+                {couponDiscount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-emerald-700">Coupon{appliedCoupon?.code ? ` (${appliedCoupon.code})` : ''}</span>
+                    <span className="text-[12px] font-black text-emerald-700">-{formatCurrency(couponDiscount)}</span>
+                  </div>
+                )}
+
+                {manualDiscountAmount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-emerald-700">Discount{manualDiscountType === 'percent' ? ` (${manualDiscountNumeric}%)` : ''}</span>
+                    <span className="text-[12px] font-black text-emerald-700">-{formatCurrency(manualDiscountAmount)}</span>
+                  </div>
+                )}
 
                 {billGstEnabled && totalGst > 0 && (
                   <>
