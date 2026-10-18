@@ -100,7 +100,7 @@ export const CreateCustomSizeModal: React.FC<CreateCustomSizeModalProps> = ({
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden animate-in fade-in duration-150">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative z-10 bg-white rounded-none sm:rounded-2xl max-w-2xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] border-0 sm:border border-[#DDD2BE] shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative z-10 bg-white rounded-none sm:rounded-2xl max-w-2xl w-full h-full max-h-full sm:h-auto sm:max-h-[90vh] border-0 sm:border border-[#DDD2BE] shadow-2xl overflow-hidden flex flex-col">
         {/* Header - fixed top */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5 border-b border-gray-200 bg-[#111111] text-white shrink-0">
           <h3 className="text-base font-black tracking-wide text-white">Create Custom Size</h3>

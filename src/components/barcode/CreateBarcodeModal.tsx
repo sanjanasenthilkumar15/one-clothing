@@ -22,6 +22,7 @@ import {
   generateBarcodeSvgString,
 } from '../../lib/barcode'
 import { BRAND_EN } from '../../lib/brand'
+import { printHtmlDocument } from '../../lib/printHtml'
 import { barcodeService } from '../../services/barcodeService'
 import { fetchVariantsByProduct, type ProductVariant } from '../../services/variantService'
 import { useProductStore } from '../../store/store'
@@ -371,22 +372,6 @@ export const CreateBarcodeModal: React.FC<CreateBarcodeModalProps> = ({
 
     try {
       // Build printable HTML sheet for thermal / regular printer
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
-      iframe.setAttribute('aria-hidden', 'true')
-      iframe.setAttribute('tabindex', '-1')
-      iframe.setAttribute('data-gramm', 'false')
-      iframe.setAttribute('data-gramm_editor', 'false')
-      iframe.setAttribute('data-enable-grammarly', 'false')
-      iframe.setAttribute('spellcheck', 'false')
-      document.body.appendChild(iframe)
-
-      const doc = iframe.contentWindow?.document
-      if (!doc) {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-        return
-      }
-
     const isThermal = settings.printerType === 'label'
     const isSmall = currentSizeConfig.heightMm <= 25
     const isLarge = currentSizeConfig.heightMm >= 40
@@ -462,8 +447,7 @@ export const CreateBarcodeModal: React.FC<CreateBarcodeModalProps> = ({
       `
     }
 
-    doc.open()
-    doc.write(`
+    const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -592,32 +576,9 @@ export const CreateBarcodeModal: React.FC<CreateBarcodeModalProps> = ({
           ${bodyContent}
         </body>
       </html>
-    `)
-    doc.close()
+    `
 
-    const cleanup = () => {
-      try {
-        if (iframe.parentNode) {
-          iframe.parentNode.removeChild(iframe)
-        }
-      } catch {}
-    }
-
-    setTimeout(() => {
-      try {
-        if (iframe.contentWindow) {
-          iframe.contentWindow.onbeforeunload = null
-          iframe.contentWindow.onunload = null
-          iframe.contentWindow.onafterprint = cleanup
-          iframe.contentWindow.focus()
-          iframe.contentWindow.print()
-        }
-      } catch (err) {
-        console.warn('[CreateBarcodeModal] Print error:', err)
-      } finally {
-        setTimeout(cleanup, 2500)
-      }
-    }, 200)
+    printHtmlDocument(html)
   } catch (err) {
     console.warn('[CreateBarcodeModal] Failed to execute print:', err)
   }
@@ -629,7 +590,7 @@ export const CreateBarcodeModal: React.FC<CreateBarcodeModalProps> = ({
     <>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden animate-in fade-in duration-150">
         <div className="absolute inset-0" onClick={onClose} />
-        <div className="relative z-10 bg-white w-full max-w-6xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[94vh] rounded-none sm:rounded-3xl border-0 sm:border border-gray-200 shadow-2xl overflow-hidden flex flex-col">
+        <div className="relative z-10 bg-white w-full max-w-6xl h-full max-h-full sm:h-auto sm:max-h-[94vh] rounded-none sm:rounded-3xl border-0 sm:border border-gray-200 shadow-2xl overflow-hidden flex flex-col">
           {/* TOP BAR matching Screenshot 195106 */}
           <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-4 border-b border-gray-200 bg-[#111111] text-white shrink-0">
             <div className="flex items-center gap-2">
