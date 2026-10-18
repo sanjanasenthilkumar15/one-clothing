@@ -80,8 +80,12 @@ export function advanceReceiptPdf(order: AdvanceOrder) {
   rows.forEach(([label, value]) => { doc.setFont('helvetica', 'bold'); doc.setTextColor('#6B7280'); doc.text(label.toUpperCase(), 16, y); doc.setFont('helvetica', 'normal'); doc.setTextColor('#1F1F1F'); doc.text(String(value), 64, y, { maxWidth: 126 }); y += 10 })
   const fin = advanceFinancials(order)
   const money: Array<readonly [string, number, boolean]> = [
-    ['Subtotal', fin.subtotal, false], ['Delivery charges', fin.delivery, false], [fin.couponCode ? `Coupon (${fin.couponCode})` : 'Discount', -fin.discount, false],
-    ['CGST', fin.cgst, false], ['SGST', fin.sgst, false], ['Total order amount', fin.total, true],
+    ['Subtotal', fin.subtotal, false],
+    ...(fin.couponDiscount > 0 ? [[fin.couponCode ? `Coupon (${fin.couponCode})` : 'Coupon', -fin.couponDiscount, false] as const] : []),
+    ...(fin.manualDiscount > 0 ? [['Manual discount', -fin.manualDiscount, false] as const] : []),
+    ...(fin.cgst + fin.sgst > 0 ? [['CGST', fin.cgst, false] as const, ['SGST', fin.sgst, false] as const] : []),
+    ['Delivery charges', fin.delivery, false],
+    ['Total order amount', fin.total, true],
     ['Deposit paid', fin.deposit, false], ...(fin.completed ? [['Final balance paid', fin.balancePaid, false] as const] : []),
     ['Remaining balance', fin.remaining, true],
   ]
@@ -158,10 +162,11 @@ ${order.category ? `<div class="r"><span class="label">Category</span><span>${es
 ${paymentRows}
 <div class="line"></div>
 <div class="r"><span>Subtotal</span><span>${esc(formatCurrency(fin.subtotal))}</span></div>
-<div class="r"><span>Delivery</span><span>${fin.delivery > 0 ? esc(formatCurrency(fin.delivery)) : 'Free'}</span></div>
-${fin.discount > 0 ? `<div class="r"><span>${esc(fin.couponCode ? `Coupon (${fin.couponCode})` : 'Discount')}</span><span>-${esc(formatCurrency(fin.discount))}</span></div>` : ''}
+${fin.couponDiscount > 0 ? `<div class="r"><span>${esc(fin.couponCode ? `Coupon (${fin.couponCode})` : 'Coupon')}</span><span>-${esc(formatCurrency(fin.couponDiscount))}</span></div>` : ''}
+${fin.manualDiscount > 0 ? `<div class="r"><span>Manual Disc.</span><span>-${esc(formatCurrency(fin.manualDiscount))}</span></div>` : ''}
 ${fin.cgst + fin.sgst > 0 ? `<div class="r"><span>CGST</span><span>${esc(formatCurrency(fin.cgst))}</span></div>
 <div class="r"><span>SGST</span><span>${esc(formatCurrency(fin.sgst))}</span></div>` : ''}
+<div class="r"><span>Delivery</span><span>${fin.delivery > 0 ? esc(formatCurrency(fin.delivery)) : 'Free'}</span></div>
 <div class="r"><span class="bold">Total Amount</span><span class="bold">${esc(formatCurrency(fin.total))}</span></div>
 <div class="r"><span>Deposit Paid</span><span class="bold">${esc(formatCurrency(fin.deposit))}</span></div>
 ${fin.completed ? `<div class="r"><span>Balance Paid</span><span class="bold">${esc(formatCurrency(fin.balancePaid))}</span></div>` : ''}

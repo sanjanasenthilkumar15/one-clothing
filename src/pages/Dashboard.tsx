@@ -1128,6 +1128,7 @@ export default function Dashboard() {
       })),
       subtotal,
       shipping: getOrderDelivery(order),
+      couponCode: order.coupon_code || null,
       couponDiscount: order.discount_amount || 0,
       manualDiscount: order.manual_discount_amount || 0,
       totalGst: order.total_gst || 0,
@@ -3776,7 +3777,7 @@ export default function Dashboard() {
                               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-[12px]">
                                 {[
                                   ['Subtotal', formatCurrency(getOrderSubtotal(o))],
-                                  ['Coupon', o.coupon_code ? `${o.coupon_code} (-${formatCurrency(o.discount_amount)})` : '—'],
+                                  ['Coupon', o.discount_amount > 0 ? `${o.coupon_code ? `${o.coupon_code} ` : ''}(-${formatCurrency(o.discount_amount)})` : '—'],
                                   ['Manual Discount', o.manual_discount_amount > 0 ? `-${formatCurrency(o.manual_discount_amount)}` : '—'],
                                   ['Delivery', getOrderDelivery(o) > 0 ? formatCurrency(getOrderDelivery(o)) : 'Free'],
                                   ['CGST', o.total_gst > 0 ? formatCurrency(splitGst(o.total_gst).cgst) : '—'],

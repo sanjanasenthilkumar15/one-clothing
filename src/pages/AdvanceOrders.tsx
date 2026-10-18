@@ -581,10 +581,11 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {cell('Subtotal', formatCurrency(fin.subtotal))}
+                    {fin.couponDiscount > 0 && cell(fin.couponCode ? `Coupon (${fin.couponCode})` : 'Coupon', `-${formatCurrency(fin.couponDiscount)}`)}
+                    {fin.manualDiscount > 0 && cell('Manual Discount', `-${formatCurrency(fin.manualDiscount)}`)}
+                    {fin.cgst + fin.sgst > 0 && cell('CGST', formatCurrency(fin.cgst))}
+                    {fin.cgst + fin.sgst > 0 && cell('SGST', formatCurrency(fin.sgst))}
                     {cell('Delivery Charges', fin.delivery > 0 ? formatCurrency(fin.delivery) : 'Free (₹0)')}
-                    {cell(fin.couponCode ? `Coupon (${fin.couponCode})` : 'Discount', fin.discount > 0 ? `-${formatCurrency(fin.discount)}` : formatCurrency(0))}
-                    {cell('CGST', formatCurrency(fin.cgst))}
-                    {cell('SGST', formatCurrency(fin.sgst))}
                     {cell('Total Amount', formatCurrency(fin.total), true)}
                   </div>
                   <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-white p-3 text-sm">

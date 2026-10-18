@@ -138,12 +138,10 @@ export function printThermalReceipt(data: ThermalReceiptData) {
 
         <div class="border-bottom" style="font-size: 12px;">
           <table style="width: 100%;">
-            ${data.subtotal !== data.total || data.advance ? `
-              <tr>
-                <td class="text-left">Subtotal</td>
-                <td class="text-right">${formatCurrency(data.subtotal)}</td>
-              </tr>
-            ` : ''}
+            <tr>
+              <td class="text-left">Subtotal</td>
+              <td class="text-right">${formatCurrency(data.subtotal)}</td>
+            </tr>
             ${(data.couponDiscount || 0) > 0 ? `
               <tr>
                 <td class="text-left">Coupon${data.couponCode ? ` (${data.couponCode})` : ''}</td>
