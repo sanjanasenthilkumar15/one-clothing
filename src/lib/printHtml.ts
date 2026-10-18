@@ -13,14 +13,17 @@ export function printHtmlDocument(html: string): void {
   if (isMobile) {
     // Must be opened synchronously inside the click handler or the popup is blocked.
     const win = window.open('', '_blank')
-    if (win) {
-      const autoPrint =
-        '<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})</script>'
-      win.document.open()
-      win.document.write(html.replace('</body>', `${autoPrint}</body>`))
-      win.document.close()
+    if (!win) {
+      window.alert('Allow pop-ups to print this document.')
       return
     }
+
+    const autoPrint =
+      '<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})</script>'
+    win.document.open()
+    win.document.write(html.replace('</body>', `${autoPrint}</body>`))
+    win.document.close()
+    return
   }
 
   const frame = document.createElement('iframe')

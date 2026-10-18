@@ -4,6 +4,7 @@ import { X, Printer, Copy, Check } from 'lucide-react'
 import { BarcodeLabel } from './BarcodeLabel'
 import { BRAND_EN } from '../../lib/brand'
 import { getAllLabelSizes, generateBarcodeSvgString, getStoredBarcodeSettings, saveStoredBarcodeSettings } from '../../lib/barcode'
+import { printHtmlDocument } from '../../lib/printHtml'
 
 export interface BarcodePrintModalProps {
   isOpen: boolean
@@ -87,22 +88,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
   const handlePrint = () => {
     try {
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
-      iframe.setAttribute('aria-hidden', 'true')
-      iframe.setAttribute('tabindex', '-1')
-      iframe.setAttribute('data-gramm', 'false')
-      iframe.setAttribute('data-gramm_editor', 'false')
-      iframe.setAttribute('data-enable-grammarly', 'false')
-      iframe.setAttribute('spellcheck', 'false')
-      document.body.appendChild(iframe)
-
-      const doc = iframe.contentWindow?.document
-      if (!doc) {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-        return
-      }
-
       const fullTitle = `${productName}${variantName ? ` (${variantName})` : ''}`
       const isThermal = printerType === 'label'
       const isSmall = selectedPreset.heightMm <= 25
@@ -344,33 +329,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       </html>
     `
 
-    doc.open()
-    doc.write(html)
-    doc.close()
-
-    const cleanup = () => {
-      try {
-        if (iframe.parentNode) {
-          iframe.parentNode.removeChild(iframe)
-        }
-      } catch {}
-    }
-
-    setTimeout(() => {
-      try {
-        if (iframe.contentWindow) {
-          iframe.contentWindow.onbeforeunload = null
-          iframe.contentWindow.onunload = null
-          iframe.contentWindow.onafterprint = cleanup
-          iframe.contentWindow.focus()
-          iframe.contentWindow.print()
-        }
-      } catch (err) {
-        console.warn('[BarcodePrintModal] Failed to execute print:', err)
-      } finally {
-        setTimeout(cleanup, 2500)
-      }
-    }, 200)
+      printHtmlDocument(html)
   } catch (err) {
     console.warn('[BarcodePrintModal] Failed to execute print:', err)
   }
@@ -404,7 +363,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
         </div>
 
         {/* Body - Scrollable */}
-        <div className="p-4 pb-28 sm:p-6 space-y-4 sm:space-y-4 overflow-y-auto flex-1 min-h-0">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
           {/* Barcode Info Card */}
           <div className="bg-[#FBFAF6] border border-[#DDD2BE] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
@@ -631,7 +590,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-[#FBFAF6] px-4 py-3 sm:px-6 sm:py-3.5 border-t border-[#DDD2BE] flex items-center justify-between pb-[calc(env(safe-area-inset-bottom)+0.75rem)] gap-2 sm:static sm:z-auto sm:shrink-0">
+        <div className="shrink-0 bg-[#FBFAF6] px-4 py-3 sm:px-6 sm:py-3.5 border-t border-[#DDD2BE] flex items-center justify-between pb-[calc(env(safe-area-inset-bottom)+0.75rem)] gap-2">
           <button
             type="button"
             onClick={onClose}

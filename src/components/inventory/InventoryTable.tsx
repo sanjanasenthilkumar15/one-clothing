@@ -408,7 +408,7 @@ export const InventoryTable: React.FC = () => {
                         <th className="py-3.5 px-4 text-left w-[130px] whitespace-nowrap">Category</th>
                         <th className="py-3.5 px-4 text-center w-[130px] whitespace-nowrap">Stock Level</th>
                         <th className="py-3.5 px-4 text-right w-[130px] whitespace-nowrap">Selling Price</th>
-                        <th className="py-3.5 px-4 text-right w-[180px] whitespace-nowrap">Actions</th>
+                        <th className="sticky right-0 z-10 bg-[#FBFAF6] py-3.5 px-4 text-right w-[180px] whitespace-nowrap shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.2)]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -479,7 +479,7 @@ export const InventoryTable: React.FC = () => {
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3.5 px-4 text-right align-middle whitespace-nowrap">
+                          <td className="sticky right-0 z-[1] bg-white py-3.5 px-4 text-right align-middle whitespace-nowrap shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.15)]">
                             <div className="flex items-center justify-end gap-1.5">
                               {/* Adjust Stock */}
                               <button

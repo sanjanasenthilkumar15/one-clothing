@@ -122,7 +122,7 @@ export function printThermalReceipt(data: ThermalReceiptData) {
                 <tr>
                   <td style="text-align: left; padding: 3px 2px 3px 0; vertical-align: top; word-break: break-word;">
                     <div style="font-size: 11px; font-weight: bold; line-height: 1.25;">${item.name}</div>
-                    <div style="font-size: 9px; color: #444; margin-top: 1px;">@ ${rateDisplay}</div>
+                    <div style="font-size: 9px; color: #444; margin-top: 1px;">${rateDisplay}</div>
                   </td>
                   <td style="text-align: center; vertical-align: top; padding: 3px 0; font-size: 11px;">
                     ${item.qty}
