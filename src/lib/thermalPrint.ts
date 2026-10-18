@@ -1,5 +1,4 @@
-import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_INSTAGRAM, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
-import { LOGO_BASE64 } from './logoBase64'
+import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_EN, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
 import { formatCurrency, formatInvoiceNo } from './retail'
 import { printHtmlDocument } from './printHtml'
 import { splitGst } from './payments'
@@ -92,10 +91,10 @@ export function printThermalReceipt(data: ThermalReceiptData) {
       </head>
       <body>
         <div class="text-center mb-2">
-          <img src="${LOGO_BASE64}" style="width: 48px; height: 48px; object-fit: contain; margin: 0 auto 6px auto; display: block;" alt="The One Clothing Logo" />
+          <div style="font-size: 16px; font-weight: 900; letter-spacing: 0.3px;">${BRAND_EN}</div>
           <div style="font-size: 9.5px; margin-top: 2px; line-height: 1.3;">${data.storeAddress || BRAND_ADDRESS}</div>
           <div class="mt-1" style="font-size: 10px; font-weight: bold;">Ph: ${BRAND_PRIMARY_PHONE_DISPLAY}</div>
-          <div style="font-size: 9px; color: #333;">${data.storeEmail || BRAND_EMAIL} | Insta: @${BRAND_INSTAGRAM}</div>
+          <div style="font-size: 9px; color: #333;">${data.storeEmail || BRAND_EMAIL}</div>
         </div>
 
         <div class="border-bottom border-top" style="font-size: 11px;">
@@ -194,7 +193,6 @@ export function printThermalReceipt(data: ThermalReceiptData) {
 
         <div class="text-center mt-2" style="font-size: 11px;">
           <div class="font-bold">Thank you for shopping at The One Clothing!</div>
-          <div>Follow us on Instagram: @${BRAND_INSTAGRAM}</div>
         </div>
       </body>
     </html>

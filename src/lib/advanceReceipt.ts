@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf'
-import { BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
+import { BRAND_ADDRESS, BRAND_EN, BRAND_PHONE_DISPLAY, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
 import { LOGO_BASE64 } from './logoBase64'
 import { formatCurrency } from './retail'
 import { formatPaymentLabel, normalizePaymentMode, round2, splitGst } from './payments'
@@ -138,7 +138,7 @@ export function printAdvanceReceipt(order: AdvanceOrder) {
 </style>
 </head><body>
 <div class="c" style="margin-bottom: 6px;">
-  <img src="${LOGO_BASE64}" style="width: 50px; height: 50px; object-fit: contain; margin: 0 auto; display: block;" alt="The One Clothing Logo" />
+  <div style="font-size: 16px; font-weight: 900;">${esc(BRAND_EN)}</div>
 </div>
 <div class="c" style="font-size:10px;color:#555;">${esc(BRAND_ADDRESS)}</div>
 <div class="c" style="font-size:10px;color:#555;">${esc(BRAND_PHONE_DISPLAY)}</div>

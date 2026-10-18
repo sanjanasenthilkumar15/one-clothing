@@ -60,6 +60,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
   const [timeline, setTimeline] = useState<AdvanceTimeline[]>([])
   const [payments, setPayments] = useState<AdvancePayment[]>([])
   const [paymentOrder, setPaymentOrder] = useState<AdvanceOrder | null>(null)
+  const [completedOrder, setCompletedOrder] = useState<AdvanceOrder | null>(null)
   const [paymentForm, setPaymentForm] = useState({ method: 'cash' as AdvancePaymentMethod, remarks: '' })
   const [depositSplit, setDepositSplit] = useState<SplitInputValue>(emptySplitInput())
   const [finalSplit, setFinalSplit] = useState<SplitInputValue>(emptySplitInput())
@@ -218,8 +219,8 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
       if (selected?.id === completed.id) void openDetails(completed)
       onOrderCompleted?.(completed); setPaymentOrder(null); setPaymentForm({ method: 'cash', remarks: '' }); setFinalSplit(emptySplitInput()); setNotice(`${result.invoice_no} generated once. The full ${formatCurrency(completed.total_amount)} is now recognized as revenue.`)
 
-      // Redirect to WhatsApp with final invoice URL + Instagram + Feedback form
-      whatsappInvoice(completed)
+      // Show the success pop-up; the user chooses to print, share on WhatsApp or download
+      setCompletedOrder(completed)
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to complete payment') } finally { setSaving(false) }
   }
 
@@ -404,6 +405,29 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
         </table>
       </div>
     </div>
+
+    {completedOrder && createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-150" onClick={e => { if (e.target === e.currentTarget) setCompletedOrder(null) }}>
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-[#DDD2BE] text-[#111111]">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={30}/></div>
+          <h3 className="text-center text-xl font-black">Payment Received &amp; Completed!</h3>
+          <p className="mt-1 text-center text-xs text-gray-500">Invoice <span className="font-mono font-black text-[#7A1F2B]">#{completedOrder.invoice_number}</span> generated successfully.</p>
+          <div className="mt-5 space-y-2 rounded-2xl border border-gray-200 bg-slate-50 p-4 text-sm">
+            <div className="flex justify-between"><span className="text-gray-500">Customer</span><b>{completedOrder.customer_name}</b></div>
+            <div className="flex justify-between"><span className="text-gray-500">Phone</span><b>{formatPhoneDisplay(completedOrder.phone)}</b></div>
+            <div className="flex justify-between"><span className="text-gray-500">Payment Mode</span><b className="capitalize">{advancePaymentText(completedOrder)}</b></div>
+            <div className="flex justify-between border-t border-gray-200 pt-2"><b>Total Settled</b><b className="text-lg text-emerald-700">{formatCurrency(completedOrder.total_amount)}</b></div>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => printFinal(completedOrder)} className="flex items-center justify-center gap-2 rounded-xl bg-[#7A1F2B] px-3 py-3 text-sm font-black text-[#E8D9B5] hover:opacity-90 cursor-pointer"><Printer size={16}/> Print Receipt</button>
+            <button type="button" onClick={() => whatsappInvoice(completedOrder)} className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-3 py-3 text-sm font-black text-white hover:opacity-90 cursor-pointer"><MessageCircle size={16}/> WhatsApp</button>
+          </div>
+          <button type="button" onClick={() => downloadFile(invoiceFile(completedOrder))} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold hover:bg-gray-50 cursor-pointer"><Download size={16}/> Download Invoice PDF</button>
+          <button type="button" onClick={() => setCompletedOrder(null)} className="mt-2 w-full rounded-xl bg-gray-100 px-3 py-3 text-sm font-black text-gray-600 hover:bg-gray-200 cursor-pointer">Close</button>
+        </div>
+      </div>,
+      document.body
+    )}
 
     {createOpen && createPortal(
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
