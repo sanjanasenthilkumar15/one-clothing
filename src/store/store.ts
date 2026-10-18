@@ -592,6 +592,23 @@ export const useAdminAuthStore = create<AdminAuthState>()(
         const trimmedId = String(portalId || '').trim()
         const trimmedPass = String(password || '').trim()
 
+        // 0. Passwords stored in the database (changeable in-app). Only if the
+        //    migration isn't installed yet (RPC error) do we fall back to env values.
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase.rpc('portal_login', { p_id: trimmedId, p_password: trimmedPass })
+          // Fall back to env values ONLY when the function doesn't exist (migration not run);
+          // any other error (network, timeout) must fail closed.
+          const fnMissing = !!error && (error.code === 'PGRST202' || error.code === '42883')
+          if (!fnMissing) {
+            if (!error && (data === 'admin' || data === 'staff')) {
+              useAlarmStore.getState().resetSilencedState()
+              set({ isLoggedIn: true, role: data, adminId: trimmedId })
+              return data
+            }
+            return false
+          }
+        }
+
         // 1. Check Admin Credentials (support VITE_ADMIN_ID or VITE_PORTAL_ID fallback)
         const adminId = String(import.meta.env.VITE_ADMIN_ID || import.meta.env.VITE_PORTAL_ID || 'admin').trim()
         const adminPass = String(import.meta.env.VITE_ADMIN_PASSWORD || import.meta.env.VITE_PORTAL_PASSWORD || 'admin123').trim()

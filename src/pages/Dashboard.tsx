@@ -4,8 +4,7 @@ import {
   Box, AlertCircle, ArrowUp, ArrowDown, Power, Download, TrendingUp, TrendingDown,
   Package, Search, RefreshCw, ShieldCheck, ShieldOff, Trophy,
   MessageCircle, ChevronDown, Eye, FileText, Printer, MoreVertical, X, Layers, Receipt,
-  SlidersHorizontal, Tag, Ticket, Percent, CheckCircle2, Info, Sparkles, Banknote, QrCode, CreditCard, Gift,
-} from 'lucide-react'
+  SlidersHorizontal, Tag, Ticket, Percent, CheckCircle2, Info, Sparkles, Banknote, QrCode, CreditCard, Gift, KeyRound } from 'lucide-react'
 import { paymentBreakdown, formatPaymentLabel, splitGst } from '../lib/payments'
 
 // Custom Malaysian Ringgit icon — replaces the generic dollar-sign icon
@@ -38,6 +37,7 @@ const RMIcon = ({ size = 16, className = '' }: { size?: number; className?: stri
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { debounce } from '../lib/debounce'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import { useAuthStore, useProductStore, useAdminAuthStore, type Product } from '../store/store'
 import { uploadProductImage } from '../lib/storage'
 import { formatCurrency, normalizeOrderMode, normalizeUnitType, toNumber, type UnitType } from '../lib/retail'
@@ -210,6 +210,7 @@ export default function Dashboard() {
   const location = useLocation()
   const navigate = useNavigate()
   const role = useAdminAuthStore(state => state.role)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [tab, setTab] = useState<TabKey>(() => {
     const params = new URLSearchParams(location.search)
     const tabParam = params.get('tab') as TabKey | null
@@ -1819,6 +1820,7 @@ export default function Dashboard() {
 
   return (
     <div className="admin-shell h-[100dvh] max-h-[100dvh] min-h-0 bg-bgMain flex flex-col lg:flex-row overflow-hidden">
+      {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
       {/* Sidebar */}
       <aside
         className={[
@@ -1869,6 +1871,14 @@ export default function Dashboard() {
           </Link>
           <button
             type="button"
+            onClick={() => setShowPasswordModal(true)}
+            title="Change password"
+            className="shrink-0 flex items-center text-white/80 hover:text-white px-2 py-1.5 rounded-lg bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+          >
+            <KeyRound size={13} />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               useAdminAuthStore.getState().logout()
               navigate('/admin-login', { replace: true })
@@ -1910,6 +1920,19 @@ export default function Dashboard() {
 
         {/* Desktop Logout Button anchored at bottom */}
         <div className={`hidden lg:block shrink-0 border-t border-white/10 p-2 lg:p-2.5 ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'}`}>
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            className={[
+              'shrink-0 flex items-center justify-center lg:justify-start mb-1',
+              'gap-2.5',
+              'w-full h-[38px] xl:h-[40px]',
+              sidebarCollapsed ? 'lg:w-[42px] lg:justify-center mx-auto' : 'lg:px-3',
+              'rounded-xl font-medium text-[12.5px] xl:text-[13px] transition-all text-white/70 hover:bg-white/10 hover:text-[#C9B79C] overflow-hidden cursor-pointer',
+            ].join(' ')}
+          >
+            <span className="shrink-0"><KeyRound size={17} /></span>
+            <span className={`truncate text-left transition-all duration-200 ${sidebarCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'opacity-100 flex-1'}`}>Change Password</span>
+          </button>
           <button
             onClick={() => {
               useAdminAuthStore.getState().logout()
