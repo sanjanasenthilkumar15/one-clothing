@@ -1,10 +1,22 @@
 import { useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAdminAuthStore } from '../store/store'
 
 const inputClass = 'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-[#111111]'
+
+function PasswordField({ value, onChange, placeholder, autoComplete }: { value: string; onChange: (v: string) => void; placeholder: string; autoComplete: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <input type={show ? 'text' : 'password'} autoComplete={autoComplete} className={`${inputClass} pr-10`} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} required />
+      <button type="button" onClick={() => setShow(v => !v)} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#111111] cursor-pointer">
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  )
+}
 
 export default function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const role = useAdminAuthStore(s => s.role)
@@ -48,9 +60,9 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
             ))}
           </div>
         )}
-        <input type="password" autoComplete="current-password" className={inputClass} placeholder={target === 'staff' ? 'Your admin password' : 'Current password'} value={current} onChange={e => setCurrent(e.target.value)} required />
-        <input type="password" autoComplete="new-password" className={inputClass} placeholder="New password (min 6 characters)" value={next} onChange={e => setNext(e.target.value)} required />
-        <input type="password" autoComplete="new-password" className={inputClass} placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+        <PasswordField autoComplete="current-password" value={current} onChange={setCurrent} placeholder={target === 'staff' ? 'Your admin password (not the staff one)' : 'Current password'} />
+        <PasswordField autoComplete="new-password" value={next} onChange={setNext} placeholder={target === 'staff' ? 'New staff password (min 6 characters)' : 'New password (min 6 characters)'} />
+        <PasswordField autoComplete="new-password" value={confirm} onChange={setConfirm} placeholder="Confirm new password" />
         {msg && <p className={`text-xs font-bold ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
         <button disabled={busy} className="w-full rounded-xl bg-[#111111] py-2.5 text-sm font-black text-[#C9B79C] disabled:opacity-60 cursor-pointer">
           {busy ? 'Saving...' : 'Update Password'}
