@@ -266,7 +266,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
           <thead className="bg-slate-50 border-b border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600">
             <tr>
               {['Deposit ID / Created','Customer','Product','Total / Deposit / Balance','Delivery','Status','Actions'].map(h => (
-                <th key={h} className="px-4 py-3.5 whitespace-nowrap">{h}</th>
+                <th key={h} className="px-2.5 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -278,37 +278,37 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
             ) : (
               filtered.map(order => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                  <td className="px-2.5 py-3 align-middle whitespace-nowrap">
                     <p className="font-black text-[#111111]">{order.deposit_id}</p>
                     <p className="text-[11px] text-gray-500">
                       {new Date(order.created_at).toLocaleDateString('en-IN')} • {new Date(order.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
                     </p>
                   </td>
-                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                  <td className="px-2.5 py-3 align-middle whitespace-nowrap">
                     <p className="font-bold text-gray-900">{order.customer_name}</p>
                     <p className="text-xs text-gray-500">{formatPhoneDisplay(order.phone)}</p>
                   </td>
-                  <td className="max-w-[180px] px-4 py-3.5 align-middle">
+                  <td className="max-w-[130px] px-2.5 py-3 align-middle">
                     <p className="truncate font-semibold text-gray-900">{order.product_name}</p>
                     <p className="truncate text-xs text-gray-500">{order.category || 'Uncategorised'}</p>
                   </td>
-                  <td className="px-4 py-3.5 text-xs align-middle whitespace-nowrap">
+                  <td className="px-2.5 py-3 text-xs align-middle whitespace-nowrap">
                     <p className="text-gray-700">Total: <b>{formatCurrency(order.total_amount)}</b></p>
                     <p className="text-[#111111]">Paid: <b>{formatCurrency(order.deposit_amount)}</b></p>
                     <p className="text-red-600 font-bold">Balance: <b>{formatCurrency(order.remaining_balance)}</b></p>
                   </td>
-                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                  <td className="px-2.5 py-3 align-middle whitespace-nowrap">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
                       <CalendarDays size={14} className="text-gray-400 shrink-0" />
                       <span>{new Date(`${order.expected_delivery_date}T00:00:00`).toLocaleDateString('en-IN')}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                  <td className="px-2.5 py-3 align-middle whitespace-nowrap">
                     <select
                       value={order.status}
                       disabled={order.status === 'completed' || order.status === 'cancelled' || !!order.invoice_number || !!order.completed_order_id}
                       onChange={e => void changeStatus(order, e.target.value as AdvanceStatus)}
-                      className={`rounded-xl border px-2.5 py-1.5 text-xs font-black outline-none shadow-xs transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed ${STATUS_STYLES[order.status]}`}
+                      className={`w-full max-w-[150px] truncate rounded-xl border px-2 py-1.5 text-[11px] font-black outline-none shadow-xs transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed ${STATUS_STYLES[order.status]}`}
                     >
                       <option value="pending_deposit">Pending Deposit</option>
                       <option value="waiting_final_payment">Waiting for Final Payment</option>
@@ -317,8 +317,8 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </td>
-                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
+                  <td className="px-2.5 py-3 align-middle">
+                    <div className="flex flex-wrap items-center gap-1">
                       {/* Receive Balance Button (strictly when no invoice exists, not completed, not cancelled, and pending/ready) */}
                       {!order.invoice_number &&
                         !order.completed_order_id &&

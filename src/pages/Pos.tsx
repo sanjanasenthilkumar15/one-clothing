@@ -448,7 +448,8 @@ export default function Pos(props: PosProps = {}) {
         name_ta: prod.name_ta,
         variant_name: varnt?.variant_name,
         price: price,
-        offer_price: prod.offer_price ? Number(prod.offer_price) : undefined,
+        // Product-level offer price must not override a variant's own price
+        offer_price: !varnt && prod.offer_price ? Number(prod.offer_price) : undefined,
         stock: effectiveStock,
         barcode: clean,
         image_url: prod.image_url,
