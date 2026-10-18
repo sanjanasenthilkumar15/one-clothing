@@ -115,15 +115,6 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
     try { const history = await getAdvanceOrderHistory(order.id); setTimeline(history.timeline); setPayments(history.payments); setSelected(current => current && current.id === order.id ? { ...current, payments: history.payments } : current) } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load order details') }
   }
 
-  const analytics = useMemo(() => ({
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'pending_deposit' || o.status === 'waiting_final_payment').length,
-    deposits: orders.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.deposit_amount, 0),
-    outstanding: orders.filter(o => !['completed', 'cancelled'].includes(o.status)).reduce((sum, o) => sum + o.remaining_balance, 0),
-    ready: orders.filter(o => o.status === 'ready_for_delivery').length,
-    completed: orders.filter(o => o.status === 'completed').length,
-  }), [orders])
-
   const filtered = useMemo(() => orders.filter(order => {
     const query = search.trim().toLowerCase()
     const searchable = [order.deposit_id, order.customer_name, order.phone, order.product_name, STATUS_LABELS[order.status]].join(' ').toLowerCase()
@@ -140,6 +131,24 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
     }
     return true
   }), [orders, search, statusFilter, dateFilter])
+
+  // Summary cards depend only on the date filter (not status buttons or search)
+  const dateScoped = useMemo(() => orders.filter(order => {
+    if (dateFilter === 'all') return true
+    const created = new Date(order.created_at); const now = new Date()
+    if (dateFilter === 'today') return dateKey(created) === dateKey(now)
+    if (dateFilter === 'week') return created >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
+  }), [orders, dateFilter])
+
+  const analytics = useMemo(() => ({
+    total: dateScoped.length,
+    pending: dateScoped.filter(o => o.status === 'pending_deposit' || o.status === 'waiting_final_payment').length,
+    deposits: dateScoped.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.deposit_amount, 0),
+    outstanding: dateScoped.filter(o => !['completed', 'cancelled'].includes(o.status)).reduce((sum, o) => sum + o.remaining_balance, 0),
+    ready: dateScoped.filter(o => o.status === 'ready_for_delivery').length,
+    completed: dateScoped.filter(o => o.status === 'completed').length,
+  }), [dateScoped])
 
   const create = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError(''); setNotice('')
@@ -289,8 +298,8 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                     <p className="text-xs text-gray-500">{formatPhoneDisplay(order.phone)}</p>
                   </td>
                   <td className="max-w-[130px] px-2.5 py-3 align-middle">
-                    <p className="truncate font-semibold text-gray-900">{order.product_name}</p>
-                    <p className="truncate text-xs text-gray-500">{order.category || 'Uncategorised'}</p>
+                    <p className="break-words font-semibold leading-tight text-gray-900">{order.product_name}</p>
+                    <p className="break-words text-xs text-gray-500">{order.category || 'Uncategorised'}</p>
                   </td>
                   <td className="px-2.5 py-3 text-xs align-middle whitespace-nowrap">
                     <p className="text-gray-700">Total: <b>{formatCurrency(order.total_amount)}</b></p>

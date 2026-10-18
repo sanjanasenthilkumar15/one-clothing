@@ -206,6 +206,8 @@ export async function invoicePdfFileFromElement(
       useCORS: true,
       logging: false,
       windowWidth: 1024,
+      scrollX: 0,
+      scrollY: -window.scrollY,
       onclone: (_clonedDoc, clonedElement) => {
         const clonedInvoice =
           clonedElement.id === 'invoice-print-root'

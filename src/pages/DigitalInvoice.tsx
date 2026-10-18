@@ -386,10 +386,10 @@ export default function DigitalInvoice() {
       </div>
 
       {/* Spacer to push content below fixed bar */}
-      <div className="h-16 print:hidden" style={{ height: 'max(64px, calc(64px + env(safe-area-inset-top)))' }} />
+      <div className="h-20 print:hidden" style={{ height: 'max(80px, calc(80px + env(safe-area-inset-top)))' }} />
 
-      <div className="max-w-3xl mx-auto pb-12 print:mt-0 print:mb-0 print:p-0 print:max-w-full px-2 sm:px-0">
-        <div ref={invoiceElementRef} className="bg-white shadow-xl rounded-2xl print:shadow-none print:rounded-none border border-sand/20 print:border-none print:m-0 print:p-0">
+      <div className="max-w-3xl mx-auto pt-2 print:mt-0 print:mb-0 print:p-0 print:max-w-full px-2 sm:px-0" style={{ paddingBottom: 'max(48px, calc(32px + env(safe-area-inset-bottom)))' }}>
+        <div ref={invoiceElementRef} className="print:m-0 print:p-0">
           <Invoice
             invoiceNo={invoice.invoice_no}
             date={invoice.created_at}
