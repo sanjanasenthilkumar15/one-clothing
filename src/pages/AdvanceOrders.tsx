@@ -8,7 +8,7 @@ import { invoicePdfFile } from '../lib/invoicePdf'
 import { printThermalReceipt } from '../lib/thermalPrint'
 import { buildAdvanceDepositWhatsAppMessage, buildProfessionalWhatsAppMessage, publicInvoiceUrl } from '../lib/whatsappMessage'
 import { formatPhoneDisplay, toWhatsAppUrl } from '../lib/phone'
-import { advanceFinancials, advancePaymentText, advanceReceiptPdf, downloadFile, printAdvanceReceipt } from '../lib/advanceReceipt'
+import { advanceFinancials, advancePaymentLines, advancePaymentText, advanceReceiptPdf, downloadFile, printAdvanceReceipt } from '../lib/advanceReceipt'
 import { useAdminAuthStore, useProductStore } from '../store/store'
 import {
   addAdvanceEvent, completeAdvanceOrder, createAdvanceOrder, getAdvanceOrderHistory, listAdvanceOrders, updateAdvanceStatus, deleteAdvanceOrder,
@@ -264,6 +264,93 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
     ['Ready For Collection', analytics.ready, PackageCheck, 'text-gray-700 bg-gray-50 border border-gray-200'], ['Completed Deposit Orders', analytics.completed, CheckCircle2, 'text-emerald-700 bg-emerald-50 border border-emerald-200'],
   ] as const
 
+  const renderStatus = (order: AdvanceOrder) => (
+          <select
+              value={order.status}
+              disabled={order.status === 'completed' || order.status === 'cancelled' || !!order.invoice_number || !!order.completed_order_id}
+              onChange={e => void changeStatus(order, e.target.value as AdvanceStatus)}
+              className={`w-full min-w-[150px] rounded-xl border px-2.5 py-1.5 text-xs font-black outline-none shadow-xs transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed ${STATUS_STYLES[order.status]}`}
+            >
+              <option value="pending_deposit">Pending Deposit</option>
+              <option value="waiting_final_payment">Waiting for Final Payment</option>
+              <option value="completed">Completed (receive payment)</option>
+              <option value="ready_for_delivery">Ready to Collect</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+  )
+
+  const renderActions = (order: AdvanceOrder) => (
+          <div className="flex flex-wrap items-center gap-1">
+              {/* Receive Balance Button (strictly when no invoice exists, not completed, not cancelled, and pending/ready) */}
+              {!order.invoice_number &&
+                !order.completed_order_id &&
+                order.status !== 'completed' &&
+                order.status !== 'cancelled' &&
+                ['pending_deposit', 'waiting_final_payment', 'ready_for_delivery'].includes(order.status) && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentOrder(order)}
+                  className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                  title="Receive Remaining Balance"
+                >
+                  <span>Receive Balance</span>
+                </button>
+              )}
+  
+              {/* View Details Icon */}
+              <button
+                type="button"
+                onClick={() => void openDetails(order)}
+                className="w-8 h-8 rounded-lg bg-[#FAF7F2] hover:bg-gray-100 text-[#111111] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="View Details"
+              >
+                <Eye size={15}/>
+              </button>
+  
+              {/* Delete Icon (admin only) */}
+              {role !== 'staff' && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrder(order.id, order.customer_name)}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                  title="Delete Order"
+                >
+                  <Trash2 size={15}/>
+                </button>
+              )}
+  
+              {/* Print Receipt / Invoice */}
+              <button
+                type="button"
+                onClick={() => printOrder(order)}
+                className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A6A4F] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title={order.status === 'completed' ? "Print Final Receipt" : "Print Advance Receipt"}
+              >
+                <Printer size={15}/>
+              </button>
+  
+              {/* Download PDF Receipt / Invoice */}
+              <button
+                type="button"
+                onClick={() => downloadFile(order.status === 'completed' ? invoiceFile(order) : advanceReceiptPdf(order))}
+                className="w-8 h-8 rounded-lg bg-[#FAF7F2] hover:bg-gray-100 text-[#111111] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title={order.status === 'completed' ? "Download PDF Invoice" : "Download PDF Receipt"}
+              >
+                <Download size={15}/>
+              </button>
+  
+              {/* WhatsApp Share */}
+              <button
+                type="button"
+                onClick={() => order.status === 'completed' ? whatsappInvoice(order) : whatsappDepositReceipt(order)}
+                className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title={order.status === 'completed' ? "Share Final Invoice via WhatsApp" : "Share Advance Receipt via WhatsApp"}
+              >
+                <MessageCircle size={15}/>
+              </button>
+            </div>
+  )
+
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#7A6A4F]">Separate from sales</p><h2 className="text-2xl font-black text-[#111111]">Advance Orders</h2><p className="mt-1 text-sm text-gray-500">Deposits never count as revenue. Full order value is recognized only after final payment.</p></div><div className="flex gap-2"><button onClick={() => void load()} className="rounded-xl border border-gray-200 bg-white p-3 text-gray-600 hover:text-[#111111] transition-colors cursor-pointer" title="Refresh"><RefreshCw size={18}/></button></div></div>
     {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
@@ -271,7 +358,39 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([label, value, Icon, color]) => <div key={label} className="rounded-2xl border border-[#DDD2BE] bg-white p-4 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-[11px] font-black uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 text-2xl font-black text-gray-900">{value}</p></div><div className={`rounded-xl p-3 ${color}`}><Icon size={21}/></div></div></div>)}</div>
     <div className="rounded-2xl border border-[#DDD2BE] bg-white p-4 shadow-sm"><div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]"><label className="relative"><Search className="absolute left-3 top-3 text-[#A8946F]" size={17}/><input className={`${inputClass} pl-10`} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Deposit ID, customer, phone, product or status"/></label><div className="flex flex-wrap gap-2">{(['all','pending','ready','completed','cancelled'] as StatusFilter[]).map(value => <button key={value} onClick={() => setStatusFilter(value)} className={`rounded-lg px-3 py-2 text-xs font-black capitalize transition-all cursor-pointer ${statusFilter === value ? 'bg-[#111111] text-[#C9B79C] shadow-xs' : 'bg-slate-100 text-gray-600 hover:bg-slate-200'}`}>{value}</button>)}</div><select className={inputClass} value={dateFilter} onChange={e => setDateFilter(e.target.value as DateFilter)}><option value="all">All Dates</option><option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option></select></div></div>
     <div className="overflow-hidden rounded-2xl border border-[#DDD2BE] bg-white shadow-sm">
-      <div className="overflow-x-auto">
+      <div className="divide-y divide-gray-100 md:hidden">
+        {loading ? (
+          <p className="px-4 py-10 text-center text-sm text-gray-500">Loading advance orders...</p>
+        ) : filtered.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-gray-500">No advance orders match these filters.</p>
+        ) : filtered.map(order => (
+          <div key={order.id} className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-black text-[#111111]">{order.deposit_id}</p>
+                <p className="text-[11px] text-gray-500">{new Date(order.created_at).toLocaleDateString('en-IN')} • {new Date(order.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-gray-700"><CalendarDays size={14} className="text-gray-400"/>{new Date(`${order.expected_delivery_date}T00:00:00`).toLocaleDateString('en-IN')}</div>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold text-gray-900">{order.customer_name}</p>
+                <p className="text-xs text-gray-500">{formatPhoneDisplay(order.phone)}</p>
+                <p className="mt-1 break-words text-sm font-semibold text-gray-900">{order.product_name}</p>
+                <p className="text-xs text-gray-500">{order.category || 'Uncategorised'}</p>
+              </div>
+              <div className="shrink-0 text-right text-xs">
+                <p className="text-gray-700">Total: <b>{formatCurrency(order.total_amount)}</b></p>
+                <p className="text-[#111111]">Paid: <b>{formatCurrency(order.deposit_amount)}</b></p>
+                <p className="font-bold text-red-600">Balance: <b>{formatCurrency(order.remaining_balance)}</b></p>
+              </div>
+            </div>
+            <div>{renderStatus(order)}</div>
+            {renderActions(order)}
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 border-b border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600">
             <tr>
@@ -314,89 +433,10 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                     </div>
                   </td>
                   <td className="px-2.5 py-3 align-middle whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      disabled={order.status === 'completed' || order.status === 'cancelled' || !!order.invoice_number || !!order.completed_order_id}
-                      onChange={e => void changeStatus(order, e.target.value as AdvanceStatus)}
-                      className={`w-full max-w-[150px] truncate rounded-xl border px-2 py-1.5 text-[11px] font-black outline-none shadow-xs transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed ${STATUS_STYLES[order.status]}`}
-                    >
-                      <option value="pending_deposit">Pending Deposit</option>
-                      <option value="waiting_final_payment">Waiting for Final Payment</option>
-                      <option value="completed">Completed (receive payment)</option>
-                      <option value="ready_for_delivery">Ready to Collect</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                    {renderStatus(order)}
                   </td>
                   <td className="px-2.5 py-3 align-middle">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {/* Receive Balance Button (strictly when no invoice exists, not completed, not cancelled, and pending/ready) */}
-                      {!order.invoice_number &&
-                        !order.completed_order_id &&
-                        order.status !== 'completed' &&
-                        order.status !== 'cancelled' &&
-                        ['pending_deposit', 'waiting_final_payment', 'ready_for_delivery'].includes(order.status) && (
-                        <button
-                          type="button"
-                          onClick={() => setPaymentOrder(order)}
-                          className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-                          title="Receive Remaining Balance"
-                        >
-                          <span>Receive Balance</span>
-                        </button>
-                      )}
-
-                      {/* View Details Icon */}
-                      <button
-                        type="button"
-                        onClick={() => void openDetails(order)}
-                        className="w-8 h-8 rounded-lg bg-[#FAF7F2] hover:bg-gray-100 text-[#111111] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title="View Details"
-                      >
-                        <Eye size={15}/>
-                      </button>
-
-                      {/* Delete Icon (admin only) */}
-                      {role !== 'staff' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteOrder(order.id, order.customer_name)}
-                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                          title="Delete Order"
-                        >
-                          <Trash2 size={15}/>
-                        </button>
-                      )}
-
-                      {/* Print Receipt / Invoice */}
-                      <button
-                        type="button"
-                        onClick={() => printOrder(order)}
-                        className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A6A4F] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title={order.status === 'completed' ? "Print Final Receipt" : "Print Advance Receipt"}
-                      >
-                        <Printer size={15}/>
-                      </button>
-
-                      {/* Download PDF Receipt / Invoice */}
-                      <button
-                        type="button"
-                        onClick={() => downloadFile(order.status === 'completed' ? invoiceFile(order) : advanceReceiptPdf(order))}
-                        className="w-8 h-8 rounded-lg bg-[#FAF7F2] hover:bg-gray-100 text-[#111111] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title={order.status === 'completed' ? "Download PDF Invoice" : "Download PDF Receipt"}
-                      >
-                        <Download size={15}/>
-                      </button>
-
-                      {/* WhatsApp Share */}
-                      <button
-                        type="button"
-                        onClick={() => order.status === 'completed' ? whatsappInvoice(order) : whatsappDepositReceipt(order)}
-                        className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title={order.status === 'completed' ? "Share Final Invoice via WhatsApp" : "Share Advance Receipt via WhatsApp"}
-                      >
-                        <MessageCircle size={15}/>
-                      </button>
-                    </div>
+                    {renderActions(order)}
                   </td>
                 </tr>
               ))
@@ -408,14 +448,14 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
 
     {completedOrder && createPortal(
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-150" onClick={e => { if (e.target === e.currentTarget) setCompletedOrder(null) }}>
-        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-[#DDD2BE] text-[#111111]">
+        <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-[#DDD2BE] text-[#111111]">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={30}/></div>
           <h3 className="text-center text-xl font-black">Payment Received &amp; Completed!</h3>
           <p className="mt-1 text-center text-xs text-gray-500">Invoice <span className="font-mono font-black text-[#7A1F2B]">#{completedOrder.invoice_number}</span> generated successfully.</p>
           <div className="mt-5 space-y-2 rounded-2xl border border-gray-200 bg-slate-50 p-4 text-sm">
             <div className="flex justify-between"><span className="text-gray-500">Customer</span><b>{completedOrder.customer_name}</b></div>
             <div className="flex justify-between"><span className="text-gray-500">Phone</span><b>{formatPhoneDisplay(completedOrder.phone)}</b></div>
-            <div className="flex justify-between"><span className="text-gray-500">Payment Mode</span><b className="capitalize">{advancePaymentText(completedOrder)}</b></div>
+            <div className="flex items-start justify-between gap-3"><span className="shrink-0 text-gray-500">Payment</span><div className="space-y-0.5 text-right">{advancePaymentLines(completedOrder).map(line => <p key={line} className="font-bold">{line}</p>)}</div></div>
             <div className="flex justify-between border-t border-gray-200 pt-2"><b>Total Settled</b><b className="text-lg text-emerald-700">{formatCurrency(completedOrder.total_amount)}</b></div>
           </div>
           <div className="mt-5 grid grid-cols-2 gap-2">
