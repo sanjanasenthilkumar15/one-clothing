@@ -40,6 +40,8 @@ export interface InvoiceProps {
   status?: string
   userId?: string
   paymentMode?: string
+  paymentLines?: string[]
+  advanceSettlement?: { depositPaid: number; balancePaid: number; remaining: number }
   onPrintReceipt?: () => void
 }
 
@@ -61,6 +63,8 @@ export const Invoice: React.FC<InvoiceProps> = ({
   status = 'completed',
   userId: _userId,
   paymentMode,
+  paymentLines,
+  advanceSettlement,
 }) => {
   const formattedInvoiceNo = formatInvoiceNo(invoiceNo)
   const dateStr = (() => {
@@ -120,12 +124,19 @@ export const Invoice: React.FC<InvoiceProps> = ({
               {status}
             </span>
           </div>
-          {paymentMode && (
+          {paymentLines?.length ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase', marginBottom: 3 }}>Payment Details</div>
+              {paymentLines.map((line, index) => (
+                <div key={`${index}-${line}`} style={{ fontSize: 10, fontWeight: 800, color: '#16a34a', textAlign: 'right', overflowWrap: 'anywhere' }}>{line}</div>
+              ))}
+            </div>
+          ) : paymentMode ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase' }}>Payment Details</span>
               <span style={{ maxWidth: '68%', fontSize: 10, fontWeight: 800, color: '#16a34a', textAlign: 'right', overflowWrap: 'anywhere' }}>{paymentMode}</span>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div style={{ minWidth: 0, padding: '12px 14px', borderRadius: 12, background: '#FAF7F2', border: '1px solid #F1EBE0', overflowWrap: 'anywhere' }}>
@@ -229,6 +240,20 @@ export const Invoice: React.FC<InvoiceProps> = ({
               <span style={{ fontSize: 15, fontWeight: 900, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total</span>
               <span style={{ fontSize: 20, fontWeight: 900, color: '#111111', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(total)}</span>
             </div>
+            {advanceSettlement && (
+              <div style={{ marginTop: 10, borderTop: '1px dashed #d0d0d0', paddingTop: 8 }}>
+                {[
+                  ['Deposit Paid', advanceSettlement.depositPaid],
+                  ['Final Balance Paid', advanceSettlement.balancePaid],
+                  ['Remaining Balance', advanceSettlement.remaining],
+                ].map(([label, amount], index) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontWeight: index === 2 ? 900 : 700, color: index === 2 ? '#166534' : '#374151' }}>
+                    <span style={{ fontSize: 11 }}>{label}</span>
+                    <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(Number(amount))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -57,6 +57,7 @@ class AlarmSoundManager {
   private activeOscillators: OscillatorNode[] = []
   private fallbackAudio: HTMLAudioElement | null = null
   private fallbackPlaybackBlocked: boolean = true
+  private soundEnabled: boolean = true
   private subscribers: Set<() => void> = new Set()
   private listenersAttached: boolean = false
 
@@ -110,6 +111,11 @@ class AlarmSoundManager {
 
   public isPlaying(): boolean {
     return this.isAlarmPlaying
+  }
+
+  public setSoundEnabled(enabled: boolean) {
+    this.soundEnabled = enabled
+    if (!enabled) this.stopAlert()
   }
 
   private getContext(): AudioContext | null {
@@ -197,6 +203,7 @@ class AlarmSoundManager {
   }
 
   private playFallbackBeep() {
+    if (!this.soundEnabled || !this.isAlarmPlaying) return
     this.warmupFallbackAudio()
     if (!this.fallbackAudio) {
       this.setFallbackPlaybackBlocked(true)
@@ -255,7 +262,7 @@ class AlarmSoundManager {
 
   // Dual-tone urgent alert pulse (A5 880 Hz -> E5 660 Hz)
   private playBeep() {
-    if (!this.isAlarmPlaying) return
+    if (!this.soundEnabled || !this.isAlarmPlaying) return
     if (this.usesHtmlAudioOnDesktop()) {
       this.playFallbackBeep()
       return
@@ -326,7 +333,7 @@ class AlarmSoundManager {
   }
 
   public startAlert() {
-    if (this.isAlarmPlaying) return
+    if (!this.soundEnabled || this.isAlarmPlaying) return
     this.stopAlert() // Clear any existing intervals / state
 
     this.isAlarmPlaying = true

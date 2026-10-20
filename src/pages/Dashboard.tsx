@@ -5,7 +5,7 @@ import {
   Package, Search, RefreshCw, ShieldCheck, ShieldOff, Trophy,
   MessageCircle, ChevronDown, Eye, FileText, Printer, MoreVertical, X, Layers, Receipt,
   SlidersHorizontal, Tag, Ticket, Percent, CheckCircle2, Info, Sparkles, Banknote, QrCode, CreditCard, Gift, KeyRound } from 'lucide-react'
-import { paymentBreakdown, formatCollectedPaymentLabel, formatGstRate, formatPaymentLabel, splitGst, splitGstRates } from '../lib/payments'
+import { formatPaymentRecord, paymentBreakdown, formatCollectedPaymentLabel, formatGstRate, formatPaymentLabel, splitGst, splitGstRates, splitTotal } from '../lib/payments'
 
 // Custom Malaysian Ringgit icon — replaces the generic dollar-sign icon
 const RMIcon = ({ size = 16, className = '' }: { size?: number; className?: string }) => (
@@ -53,7 +53,7 @@ import { createVariant, updateVariant, deleteVariant, setDefaultVariant, type Pr
 import { useVariantStore } from '../store/store'
 import Pos from './Pos'
 import AdvanceOrders from './AdvanceOrders'
-import type { AdvanceOrder } from '../services/advanceOrderService'
+import { getAdvanceSalePaymentSummaries, type AdvanceOrder } from '../services/advanceOrderService'
 import { InventoryTable } from '../components/inventory/InventoryTable'
 import { CategoryManagerView } from '../components/inventory/CategoryManagerView'
 import { ExpensesView } from '../components/expenses/ExpensesView'
@@ -81,6 +81,32 @@ type DashboardOrder = {
   created_at: string; total: number; status: string; order_mode: string; order_type: string; user_id: string | null; items: unknown
   coupon_code: string; discount_amount: number; manual_discount_amount: number; delivery_charge: number; shipping?: number
   total_gst: number; payment_mode: string; payment_method?: string; split_details?: unknown; invoice_pdf_url: string; remarks?: string; reference_number?: string
+  advancePaymentLines?: string[]
+  advanceSettlement?: { depositPaid: number; balancePaid: number; remaining: number }
+}
+const withAdvancePaymentDetails = async (ordersToEnrich: DashboardOrder[]): Promise<DashboardOrder[]> => {
+  const advanceOrders = ordersToEnrich.filter(order => order.order_type === 'advance_order')
+  if (!advanceOrders.length) return ordersToEnrich
+  const summaries = await getAdvanceSalePaymentSummaries(advanceOrders.map(order => order.id))
+  return ordersToEnrich.map(order => {
+    const summary = summaries.get(order.id)
+    if (!summary) return order
+    const paymentsTotal = summary.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    const totalMatches = Math.abs(paymentsTotal - order.total) < 0.01
+    const splitDetails = splitTotal(summary.splitDetails) > 0 && totalMatches
+      ? summary.splitDetails
+      : order.split_details
+    return {
+      ...order,
+      split_details: splitDetails,
+      advancePaymentLines: summary.payments.map(formatPaymentRecord),
+      advanceSettlement: {
+        depositPaid: summary.depositPaid,
+        balancePaid: summary.balancePaid,
+        remaining: 0,
+      },
+    }
+  })
 }
 type DashboardOrderItem = { order_id: string; product_id?: string | null; variant_id?: string | null; product_name: string; category?: string; quantity: number; line_total: number; is_manual?: boolean | null }
 type DashboardCoupon = {
@@ -440,6 +466,12 @@ export default function Dashboard() {
       payment_mode: advance.final_payment_method || '',
       payment_method: advance.final_payment_method || '',
       split_details: advance.split_details,
+      advancePaymentLines: (advance.payments || []).map(formatPaymentRecord),
+      advanceSettlement: {
+        depositPaid: advance.deposit_amount,
+        balancePaid: Math.max(0, advance.total_amount - advance.deposit_amount),
+        remaining: 0,
+      },
       invoice_pdf_url: '',
       remarks: advance.remarks || '',
       reference_number: advance.reference_number || '',
@@ -919,7 +951,7 @@ export default function Dashboard() {
       ])
       if (cRes.error) throw cRes.error
       if (oRes.error) throw oRes.error
-      const mappedOrders = (oRes.data || []).map(r => toDashboardOrder(r as Record<string, unknown>))
+      const mappedOrders = await withAdvancePaymentDetails((oRes.data || []).map(r => toDashboardOrder(r as Record<string, unknown>)))
       setCats((cRes.data || []) as Category[])
       setOrders(mappedOrders)
       setSearchResults(mappedOrders.slice(0, 100))
@@ -1136,7 +1168,10 @@ export default function Dashboard() {
       couponDiscount: order.discount_amount || 0,
       manualDiscount: order.manual_discount_amount || 0,
       totalGst: order.total_gst || 0,
-      total: order.total
+      total: order.total,
+      paymentMode: formatCollectedPaymentLabel(order.payment_mode || order.payment_method, order.split_details) || order.payment_mode || order.payment_method,
+      paymentLines: order.advancePaymentLines,
+      advance: order.advanceSettlement,
     })
   }
 
@@ -1146,15 +1181,6 @@ export default function Dashboard() {
       return
     }
 
-    if (order.invoice_pdf_url) {
-      const link = document.createElement('a')
-      link.href = order.invoice_pdf_url
-      if (mode === 'download') link.download = `Invoice-${order.invoice_no || order.id}.pdf`
-      if (mode === 'download') { link.click(); return }
-      const opened = window.open(order.invoice_pdf_url, '_blank', 'noopener,noreferrer')
-      if (mode === 'print') opened?.addEventListener('load', () => opened.print())
-      return
-    }
     const preview = getOrderWhatsAppPreview(order)
     if (!preview) { alert('This order has no invoice details available.'); return }
     const file = invoicePdfFile({
@@ -1171,6 +1197,8 @@ export default function Dashboard() {
       manualDiscountAmount: order.manual_discount_amount,
       gstAmount: order.total_gst,
       paymentMode: formatCollectedPaymentLabel(order.payment_mode, order.split_details) || order.payment_mode,
+      paymentLines: order.advancePaymentLines,
+      advance: order.advanceSettlement,
       total: order.total,
     })
     const url = URL.createObjectURL(file)
@@ -1499,7 +1527,8 @@ export default function Dashboard() {
         }
       }
 
-      setSearchResults(results.filter(o => !deletedOrderIds.current.has(o.id)))
+      const enrichedResults = await withAdvancePaymentDetails(results.filter(o => !deletedOrderIds.current.has(o.id)))
+      setSearchResults(enrichedResults)
     } catch (err) {
       console.error('Search error:', err)
       setSearchResults([])
@@ -1627,7 +1656,9 @@ export default function Dashboard() {
         weightValue: variantForm.weightValue ? Number(variantForm.weightValue) : null,
         weightUnit:  variantForm.weightUnit.trim() || null,
         isDefault:   variantForm.isDefault,
-        sortOrder:   getVariants(String(editingProd.id)).length,
+        sortOrder:   editingVariantId
+          ? getVariants(String(editingProd.id)).find(variant => variant.id === editingVariantId)?.sortOrder ?? 0
+          : getVariants(String(editingProd.id)).reduce((max, variant) => Math.max(max, variant.sortOrder), -1) + 1,
       }
       if (editingVariantId) {
         const { error } = await updateVariant(editingVariantId, payload)
@@ -1642,6 +1673,18 @@ export default function Dashboard() {
           await supabase.from('products').update({ has_variants: true }).eq('id', editingProd.id)
         }
       }
+      const { data: variantStocks, error: stockFetchError } = await supabase
+        .from('product_variants')
+        .select('stock')
+        .eq('product_id', editingProd.id)
+        .eq('is_active', true)
+      if (stockFetchError) throw stockFetchError
+      const totalVariantStock = (variantStocks || []).reduce((sum, variant) => sum + Number(variant.stock || 0), 0)
+      const { error: aggregateError } = await supabase
+        .from('products')
+        .update({ stock_quantity: totalVariantStock, stock: Math.floor(totalVariantStock) })
+        .eq('id', editingProd.id)
+      if (aggregateError) throw aggregateError
       setVariantForm({ name: '', sizeLabel: '', price: '', purchasePrice: '', mrp: '', sku: '', barcode: '', stock: '50', weightValue: '', weightUnit: '', isDefault: false })
       setEditingVariantId(null)
       await refetchVariants()
@@ -2670,6 +2713,14 @@ export default function Dashboard() {
                       label: 'Offline Revenue',
                       helper: 'Walk-in POS sales',
                       value: formatCurrency(analytics.posRevenue),
+                      icon: <RMIcon size={16} />,
+                      color: 'text-gray-500',
+                      bg: 'bg-gray-50',
+                    },
+                    {
+                      label: 'Online Revenue',
+                      helper: 'Completed online POS sales',
+                      value: formatCurrency(analytics.onlinePosRevenue),
                       icon: <RMIcon size={16} />,
                       color: 'text-gray-500',
                       bg: 'bg-gray-50',
@@ -4804,6 +4855,8 @@ export default function Dashboard() {
                     manualDiscountAmount={invoicePreviewOrder.manual_discount_amount}
                     gstAmount={invoicePreviewOrder.total_gst}
                     paymentMode={formatCollectedPaymentLabel(invoicePreviewOrder.payment_mode, invoicePreviewOrder.split_details) || invoicePreviewOrder.payment_mode}
+                    paymentLines={invoicePreviewOrder.advancePaymentLines}
+                    advanceSettlement={invoicePreviewOrder.advanceSettlement}
                     total={invoicePreviewOrder.total}
                     status={invoicePreviewOrder.status}
                   />

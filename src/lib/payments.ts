@@ -86,6 +86,31 @@ export function formatCollectedPaymentLabel(mode: unknown, splitRaw?: unknown): 
   return formatPaymentLabel(mode, splitRaw)
 }
 
+export type PaymentRecord = {
+  payment_type: string
+  amount: number
+  payment_method: string
+  split_details?: unknown
+}
+
+export function aggregatePaymentRecords(payments: PaymentRecord[]): SplitDetails {
+  return payments.reduce<SplitDetails>((total, payment) => {
+    const parts = paymentBreakdown(payment.payment_method, payment.split_details, Number(payment.amount))
+    return {
+      cash: round2(total.cash + parts.cash),
+      qr: round2(total.qr + parts.qr),
+      card: round2(total.card + parts.card),
+    }
+  }, emptySplit())
+}
+
+export function formatPaymentRecord(payment: PaymentRecord): string {
+  const kind = payment.payment_type === 'deposit' ? 'Deposit' : 'Final balance'
+  const label = formatPaymentLabel(payment.payment_method, payment.split_details)
+  if (normalizePaymentMode(payment.payment_method) === 'split') return `${kind}: ${label}`
+  return `${kind}: ${label} ${inr(Number(payment.amount))}`
+}
+
 /** Splits a total GST amount into equal CGST + SGST halves (paise-safe: SGST takes the remainder). */
 export function splitGst(totalGst: number): { cgst: number; sgst: number } {
   const total = round2(Math.max(0, Number(totalGst) || 0))

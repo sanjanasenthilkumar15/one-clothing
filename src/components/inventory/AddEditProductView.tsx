@@ -332,7 +332,7 @@ export const AddEditProductView: React.FC<{
           const prevStock = currentProd ? (currentProd.stock_quantity ?? currentProd.stock ?? 0) : 0
           const delta = inputStock - prevStock
 
-          const { error: updErr } = await supabase
+          const { data: updatedProduct, error: updErr } = await supabase
             .from('products')
             .update({
               name: trimmedName,
@@ -350,8 +350,13 @@ export const AddEditProductView: React.FC<{
               stock: inputStock,
             })
             .eq('id', selectedProductId)
+            .select('low_stock_alert')
+            .single()
 
           if (updErr) throw updErr
+          if (Number(updatedProduct.low_stock_alert) !== alertThreshold) {
+            throw new Error('The low stock alert threshold was not saved. Please try again.')
+          }
 
           if (delta !== 0) {
             await supabase.from('inventory_movements').insert({
@@ -387,7 +392,7 @@ export const AddEditProductView: React.FC<{
         } else {
           // Multi-variant update
           let totalVariantStock = 0
-          for (const v of variantRows) {
+          for (const [variantIndex, v] of variantRows.entries()) {
             if (!v.variantName.trim()) continue
             const vPrice = Number(v.price) > 0 ? Number(v.price) : priceNum
             const vCost = Number(v.costPrice) > 0 ? Number(v.costPrice) : costNum
@@ -406,12 +411,28 @@ export const AddEditProductView: React.FC<{
                   purchase_price: vCost,
                   stock: vStock,
                   barcode: v.customBarcode?.trim() || null,
+                  sort_order: variantIndex,
                   is_active: true,
                 })
                 .select()
                 .single()
 
-              if (!vErr && createdVar && vStock > 0) {
+              if (vErr || !createdVar) throw vErr || new Error(`Failed to save variant ${v.variantName.trim()}`)
+
+              if (normalizeBarcode(v.customBarcode)) {
+                const { error: barcodeErr } = await supabase.from('barcode_registry').upsert(
+                  {
+                    barcode_value: normalizeBarcode(v.customBarcode),
+                    product_id: selectedProductId,
+                    variant_id: createdVar.id,
+                    is_active: true,
+                  },
+                  { onConflict: 'barcode_value' }
+                )
+                if (barcodeErr) throw barcodeErr
+              }
+
+              if (vStock > 0) {
                 await supabase.from('inventory_movements').insert({
                   product_id: selectedProductId,
                   variant_id: createdVar.id,
@@ -427,16 +448,18 @@ export const AddEditProductView: React.FC<{
               }
             } else {
               // Update existing variant
-              const { data: curVar } = await supabase
+              const { data: curVar, error: curVarErr } = await supabase
                 .from('product_variants')
-                .select('stock')
+                .select('id, stock')
                 .eq('id', v.id)
+                .eq('product_id', selectedProductId)
                 .single()
 
+              if (curVarErr || !curVar) throw curVarErr || new Error(`Variant ${v.variantName.trim()} no longer exists`)
               const prevVarStock = curVar?.stock ?? 0
               const varDelta = vStock - prevVarStock
 
-              await supabase
+              const { error: updateVariantError } = await supabase
                 .from('product_variants')
                 .update({
                   variant_name: v.variantName.trim(),
@@ -445,8 +468,31 @@ export const AddEditProductView: React.FC<{
                   purchase_price: vCost,
                   stock: vStock,
                   barcode: v.customBarcode?.trim() || null,
+                  sort_order: variantIndex,
                 })
                 .eq('id', v.id)
+                .eq('product_id', selectedProductId)
+
+              if (updateVariantError) throw updateVariantError
+
+              const { error: deactivateBarcodeError } = await supabase
+                .from('barcode_registry')
+                .update({ is_active: false })
+                .eq('variant_id', v.id)
+                .eq('is_active', true)
+              if (deactivateBarcodeError) throw deactivateBarcodeError
+              if (normalizeBarcode(v.customBarcode)) {
+                const { error: barcodeErr } = await supabase.from('barcode_registry').upsert(
+                  {
+                    barcode_value: normalizeBarcode(v.customBarcode),
+                    product_id: selectedProductId,
+                    variant_id: v.id,
+                    is_active: true,
+                  },
+                  { onConflict: 'barcode_value' }
+                )
+                if (barcodeErr) throw barcodeErr
+              }
 
               if (varDelta !== 0) {
                 await supabase.from('inventory_movements').insert({
@@ -466,7 +512,7 @@ export const AddEditProductView: React.FC<{
           }
 
           // Update parent product
-          await supabase
+          const { data: updatedProduct, error: updErr } = await supabase
             .from('products')
             .update({
               name: trimmedName,
@@ -484,6 +530,13 @@ export const AddEditProductView: React.FC<{
               stock: totalVariantStock,
             })
             .eq('id', selectedProductId)
+            .select('low_stock_alert')
+            .single()
+
+          if (updErr) throw updErr
+          if (Number(updatedProduct.low_stock_alert) !== alertThreshold) {
+            throw new Error('The low stock alert threshold was not saved. Please try again.')
+          }
 
           setStatusMessage({
             type: 'success',
@@ -582,13 +635,13 @@ export const AddEditProductView: React.FC<{
 
           if (insErr || !newProd) throw insErr || new Error('Failed to create product')
 
-          for (const v of variantRows) {
+          for (const [variantIndex, v] of variantRows.entries()) {
             if (!v.variantName.trim()) continue
             const vPrice = Number(v.price) > 0 ? Number(v.price) : priceNum
             const vCost = Number(v.costPrice) > 0 ? Number(v.costPrice) : costNum
             const vStock = Math.max(0, Number(v.stock) || 0)
 
-            const { data: createdVar } = await supabase
+            const { data: createdVar, error: variantError } = await supabase
               .from('product_variants')
               .insert({
                 product_id: newProd.id,
@@ -598,10 +651,13 @@ export const AddEditProductView: React.FC<{
                 purchase_price: vCost,
                 stock: vStock,
                 barcode: v.customBarcode?.trim() || null,
+                sort_order: variantIndex,
                 is_active: true,
               })
               .select('id')
               .single()
+
+            if (variantError || !createdVar) throw variantError || new Error(`Failed to save variant ${v.variantName.trim()}`)
 
             if (createdVar && normalizeBarcode(v.customBarcode)) {
               await supabase.from('barcode_registry').upsert(

@@ -313,10 +313,7 @@ export default function Pos(props: PosProps = {}) {
     // If product has variants, check its variants from DB or store
     if (product.hasVariants) {
       try {
-        let vars = getVariants(String(product.id))
-        if (!vars || vars.length === 0) {
-          vars = await fetchVariantsByProduct(String(product.id))
-        }
+        const vars = await fetchVariantsByProduct(String(product.id))
 
         if (vars && vars.length > 1) {
           // Multiple variants: open variant picker
@@ -331,7 +328,9 @@ export default function Pos(props: PosProps = {}) {
           return
         }
       } catch (err) {
-        console.warn('Failed to load variants for product:', err)
+        console.error('Failed to load current variant stock for product:', err)
+        setError('Unable to load current variant stock. Please refresh and try again.')
+        return
       }
     }
 
@@ -399,6 +398,14 @@ export default function Pos(props: PosProps = {}) {
   const addVariantToItems = () => {
     if (!variantPickerProduct || !selectedVariant) return
     setError('')
+    const addQty = Math.max(1, variantPickerQty)
+    const existingQty = items.find(item =>
+      item.variantId === selectedVariant.id || String(item.id) === String(selectedVariant.id)
+    )?.qty || 0
+    if (selectedVariant.stock <= 0 || existingQty + addQty > selectedVariant.stock) {
+      setError(`Only ${Math.max(0, selectedVariant.stock - existingQty)} units of ${selectedVariant.variantName} are currently available.`)
+      return
+    }
     const variantProduct: Product = {
       ...variantPickerProduct,
       id: selectedVariant.id,
@@ -412,7 +419,6 @@ export default function Pos(props: PosProps = {}) {
       baseQuantity: 1,
       unitLabel: selectedVariant.sizeLabel || variantPickerProduct.unitLabel || 'piece',
     }
-    const addQty = Math.max(1, variantPickerQty)
     setItems(cur => {
       const ex = cur.find(i => (i.variantId === selectedVariant.id || String(i.id) === String(selectedVariant.id)))
       if (!ex) {
@@ -430,6 +436,12 @@ export default function Pos(props: PosProps = {}) {
     setAvailableVariants([])
     setMobilePanelView('catalogue')
   }
+  const selectedVariantCartQuantity = selectedVariant
+    ? items.find(item =>
+        item.variantId === selectedVariant.id || String(item.id) === String(selectedVariant.id)
+      )?.qty || 0
+    : 0
+  const selectedVariantRemainingStock = Math.max(0, (selectedVariant?.stock || 0) - selectedVariantCartQuantity)
 
   // Barcode scanner item handler (Consecutive scan increments cart quantity)
   const handleScannedItem = (scanned: ScannedItemPayload) => {
@@ -991,6 +1003,7 @@ export default function Pos(props: PosProps = {}) {
       manualDiscount: inv.manualDiscountAmount,
       totalGst: inv.gstAmount,
       total: inv.total,
+      paymentMode: inv.paymentMode,
     })
   }
 
@@ -2045,11 +2058,19 @@ export default function Pos(props: PosProps = {}) {
                   {availableVariants.map((v) => (
                     <div
                       key={v.id}
-                      onClick={() => setSelectedVariant(v)}
-                      className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                      onClick={() => {
+                        if (v.stock > 0) {
+                          setSelectedVariant(v)
+                          setVariantPickerQty(1)
+                        }
+                      }}
+                      aria-disabled={v.stock <= 0}
+                      className={`p-3 rounded-2xl border-2 transition-all flex flex-col justify-between ${
                         selectedVariant?.id === v.id
                           ? 'border-[#111111] bg-[#FAF7F2] shadow-xs'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
+                          : v.stock <= 0
+                            ? 'border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed'
+                            : 'border-gray-200 bg-white hover:border-gray-300 cursor-pointer'
                       }`}
                     >
                       <div className="font-black text-xs text-gray-900">
@@ -2081,7 +2102,8 @@ export default function Pos(props: PosProps = {}) {
                   <button
                     type="button"
                     onClick={() => setVariantPickerQty((q) => q + 1)}
-                    className="w-8 h-8 rounded-xl border border-gray-300 bg-white font-black text-sm flex items-center justify-center hover:bg-gray-100 cursor-pointer"
+                    disabled={!selectedVariant || variantPickerQty >= selectedVariantRemainingStock}
+                    className="w-8 h-8 rounded-xl border border-gray-300 bg-white font-black text-sm flex items-center justify-center hover:bg-gray-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
@@ -2092,6 +2114,7 @@ export default function Pos(props: PosProps = {}) {
               <button
                 type="button"
                 onClick={addVariantToItems}
+                disabled={!selectedVariant || selectedVariantRemainingStock <= 0 || variantPickerQty > selectedVariantRemainingStock}
                 className="w-full py-3 rounded-2xl bg-[#111111] hover:bg-[#262626] border border-[#C9B79C]/50 text-[#C9B79C] text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 Add to Order (₹{((selectedVariant?.price || variantPickerProduct.price || 0) * variantPickerQty).toFixed(2)})

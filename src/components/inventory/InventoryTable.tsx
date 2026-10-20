@@ -98,8 +98,18 @@ export const InventoryTable: React.FC = () => {
   }
 
   useEffect(() => {
+    if (activeTab !== 'stock') return
     void loadData()
-  }, [loadData])
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadData()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [activeTab, loadData])
 
   // Filter items for Stock Management view
   const filtered = items.filter((item) => {

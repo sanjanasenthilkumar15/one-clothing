@@ -3,13 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { Invoice } from '../components/Invoice'
 import { Printer, ArrowLeft, MessageCircle } from 'lucide-react'
-import { printThermalReceipt } from '../lib/thermalPrint'
-import { invoicePdfFile, invoicePdfFileFromElement } from '../lib/invoicePdf'
+import { invoicePdfFile } from '../lib/invoicePdf'
 import { uploadInvoicePdf } from '../lib/storage'
 import { isUuid, normalizeStructuredOrderItem, formatInvoiceNo } from '../lib/retail'
 import { buildProfessionalWhatsAppMessage } from '../lib/whatsappMessage'
+import { getAdvanceSalePaymentSummaries } from '../services/advanceOrderService'
 import { toWhatsAppUrl } from '../lib/phone'
-import { formatCollectedPaymentLabel } from '../lib/payments'
+import { formatCollectedPaymentLabel, formatPaymentRecord, splitTotal } from '../lib/payments'
 
 function buildLookupCandidates(id: string): string[] {
   const raw = decodeURIComponent(id || '').trim()
@@ -183,6 +183,25 @@ export default function DigitalInvoice() {
 
         if (!row) throw new Error('Invoice not found')
 
+        const saleId = String(row.id || '')
+        const advanceSummary = (await getAdvanceSalePaymentSummaries([saleId])).get(saleId)
+        if (advanceSummary) {
+          const paymentTotal = advanceSummary.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+          const collectedDetails = advanceSummary.splitDetails
+          row = {
+            ...row,
+            split_details: splitTotal(collectedDetails) > 0 && Math.abs(paymentTotal - Number(row.total || 0)) < 0.01
+              ? collectedDetails
+              : row.split_details,
+            advance_payment_lines: advanceSummary.payments.map(formatPaymentRecord),
+            advance_settlement: {
+              depositPaid: advanceSummary.depositPaid,
+              balancePaid: advanceSummary.balancePaid,
+              remaining: 0,
+            },
+          }
+        }
+
         setInvoice(row)
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -223,6 +242,27 @@ export default function DigitalInvoice() {
   const invoiceItems = (Array.isArray(invoice.items) ? invoice.items : [])
     .map((item: Record<string, unknown>) => normalizeStructuredOrderItem(item))
   const subtotal = invoiceItems.reduce((sum: number, item: ReturnType<typeof normalizeStructuredOrderItem>) => sum + item.line_total, 0)
+  const paymentLines = Array.isArray(invoice.advance_payment_lines) ? invoice.advance_payment_lines as string[] : undefined
+  const advanceSettlement = invoice.advance_settlement as { depositPaid: number; balancePaid: number; remaining: number } | undefined
+  const invoiceTotal = invoice.total > 0 ? invoice.total : (subtotal + (invoice.delivery_charge || 0) + (invoice.total_gst || invoice.gst_amount || 0) - (invoice.discount_amount || 0) - (invoice.manual_discount_amount || 0))
+  const createInvoiceFile = () => invoicePdfFile({
+    invoiceNo: invoice.invoice_no,
+    date: invoice.created_at,
+    customerName: invoice.customer_name,
+    phone: invoice.phone,
+    address: invoice.address || '',
+    items: invoice.items || [],
+    subtotal,
+    shipping: invoice.delivery_charge || 0,
+    discountAmount: invoice.discount_amount || 0,
+    manualDiscountAmount: invoice.manual_discount_amount || 0,
+    gstAmount: invoice.total_gst || invoice.gst_amount || 0,
+    couponCode: invoice.coupon_code,
+    paymentMode: formatCollectedPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method,
+    paymentLines,
+    advance: advanceSettlement,
+    total: invoiceTotal,
+  })
 
   const downloadPdf = async () => {
     if (!invoiceElementRef.current || downloadingPdf) return
@@ -254,7 +294,7 @@ export default function DigitalInvoice() {
 
     setDownloadingPdf(true)
     try {
-      const file = await invoicePdfFileFromElement(invoiceElementRef.current, invoice.invoice_no)
+      const file = createInvoiceFile()
       const url = URL.createObjectURL(file)
 
       if (isIOS) {
@@ -332,36 +372,11 @@ export default function DigitalInvoice() {
     if (!pdfUrl && invoiceElementRef.current) {
       void (async () => {
         try {
-          const file = await invoicePdfFileFromElement(invoiceElementRef.current!, invoice.invoice_no)
+          const file = createInvoiceFile()
           await uploadInvoicePdf(file, invoice.invoice_no)
         } catch { /* best-effort background upload */ }
       })()
     }
-  }
-
-  const printReceipt = () => {
-    printThermalReceipt({
-      invoiceNo: invoice.invoice_no,
-      date: invoice.created_at,
-      customerName: invoice.customer_name,
-      phone: invoice.phone,
-      items: (invoice.items || []).map((item: Record<string, unknown>) => ({
-        name: item.name || item.product_name,
-        note: typeof item.note === 'string' ? item.note : null,
-        variant_name: typeof item.variant_name === 'string' ? item.variant_name : null,
-        qty: item.qty || item.quantity,
-        unit: item.unit,
-        price: item.price || item.base_price || 0,
-        line_total: item.line_total
-      })),
-      subtotal,
-      shipping: invoice.delivery_charge || 0,
-      couponCode: invoice.coupon_code,
-      couponDiscount: invoice.discount_amount || 0,
-      manualDiscount: invoice.manual_discount_amount || 0,
-      totalGst: invoice.total_gst || invoice.gst_amount || 0,
-      total: invoice.total > 0 ? invoice.total : (subtotal + (invoice.delivery_charge || 0) + (invoice.total_gst || invoice.gst_amount || 0) - (invoice.discount_amount || 0) - (invoice.manual_discount_amount || 0))
-    })
   }
 
   return (
@@ -406,9 +421,11 @@ export default function DigitalInvoice() {
             manualDiscountAmount={invoice.manual_discount_amount || 0}
             gstAmount={invoice.total_gst || invoice.gst_amount || 0}
             couponCode={invoice.coupon_code}
-            total={invoice.total > 0 ? invoice.total : (subtotal + (invoice.delivery_charge || 0) + (invoice.total_gst || invoice.gst_amount || 0) - (invoice.discount_amount || 0) - (invoice.manual_discount_amount || 0))}
+            total={invoiceTotal}
             status={invoice.status}
             paymentMode={formatCollectedPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method}
+            paymentLines={paymentLines}
+            advanceSettlement={advanceSettlement}
           />
         </div>
       </div>

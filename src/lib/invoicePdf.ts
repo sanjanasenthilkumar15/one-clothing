@@ -21,6 +21,7 @@ export type InvoicePdfData = {
   gstAmount?: number
   couponCode?: string | null
   paymentMode?: string
+  paymentLines?: string[]
   /** Advance-order settlement lines shown under the total */
   advance?: { depositPaid: number; balancePaid: number; remaining: number }
 }
@@ -70,9 +71,17 @@ export function createInvoicePdf(data: InvoicePdfData): Blob {
   doc.text(`Phone: ${BRAND_PHONE_DISPLAY}`, left + 26, y + 20)
   doc.text(`Date: ${new Date(data.date).toLocaleDateString('en-IN')}`, right, y + 2, { align: 'right' })
   // Helvetica has no ₹ glyph: swap it for "Rs." and wrap long split-payment text so it stays inside the page
-  const paymentText = `Payment: ${data.paymentMode || 'POS'}`.replace(/[₹₹]\s*/g, 'Rs. ')
-  doc.text(doc.splitTextToSize(paymentText, 72) as string[], right, y + 7, { align: 'right' })
-  y += 32
+  const paymentTextLines = data.paymentLines?.length
+    ? data.paymentLines
+    : [`Payment: ${data.paymentMode || 'POS'}`]
+  let paymentOffset = 7
+  for (const line of paymentTextLines) {
+    const paymentLine = `${data.paymentLines?.length ? 'Payment: ' : ''}${line}`
+    const wrapped = doc.splitTextToSize(paymentLine.replace(/[₹₹]\s*/g, 'Rs. '), 72) as string[]
+    doc.text(wrapped, right, y + paymentOffset, { align: 'right' })
+    paymentOffset += wrapped.length * 4
+  }
+  y += Math.max(32, paymentOffset + 19)
 
   const customerName = String(data.customerName || 'Walk-in Customer').trim()
   const customerPhone = formatPhoneDisplay(data.phone) || '—'

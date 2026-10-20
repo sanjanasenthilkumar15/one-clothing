@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { parseSplit, splitTotal, type SplitDetails } from '../lib/payments'
+import { aggregatePaymentRecords, parseSplit, splitTotal, type SplitDetails } from '../lib/payments'
 
 export type AdvanceStatus = 'pending_deposit' | 'ready_for_delivery' | 'waiting_final_payment' | 'completed' | 'cancelled'
 export type AdvancePaymentMethod = 'cash' | 'upi' | 'card' | 'split'
@@ -133,19 +133,21 @@ async function enrichOrders(orders: AdvanceOrder[]): Promise<AdvanceOrder[]> {
   }
   const paymentsByOrder = new Map<string, AdvancePayment[]>()
   const breakdownByOrder = new Map<string, NonNullable<AdvanceOrder['breakdown']>>()
+  const splitByOrder = new Map<string, SplitDetails>()
   try {
     const ids = orders.map(o => o.id)
     const completedIds = orders.map(o => o.completed_order_id).filter((id): id is string => Boolean(id))
     const [payRes, ordRes] = await Promise.all([
       supabase.from('advance_order_payments').select('*').in('advance_order_id', ids).order('received_at'),
       completedIds.length
-        ? supabase.from('orders').select('id, total_gst, gst_amount, discount_amount, delivery_charge, shipping').in('id', completedIds)
+        ? supabase.from('orders').select('id, split_details, total_gst, gst_amount, discount_amount, delivery_charge, shipping').in('id', completedIds)
         : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
     ])
     for (const row of (payRes.data || []) as AdvancePayment[]) {
       paymentsByOrder.set(row.advance_order_id, [...(paymentsByOrder.get(row.advance_order_id) || []), row])
     }
     for (const row of (ordRes.data || []) as Array<Record<string, unknown>>) {
+      splitByOrder.set(String(row.id), parseSplit(row.split_details))
       breakdownByOrder.set(String(row.id), {
         discount: Number(row.discount_amount || 0),
         delivery: Number(row.delivery_charge || row.shipping || 0),
@@ -157,8 +159,63 @@ async function enrichOrders(orders: AdvanceOrder[]): Promise<AdvanceOrder[]> {
   return orders.map(o => ({
     ...o,
     payments: paymentsByOrder.get(o.id) || localPayments.filter(p => p.advance_order_id === o.id),
+    split_details: o.completed_order_id && splitByOrder.has(o.completed_order_id) && splitTotal(splitByOrder.get(o.completed_order_id)!) > 0
+      ? splitByOrder.get(o.completed_order_id)
+      : o.split_details,
     breakdown: o.completed_order_id ? breakdownByOrder.get(o.completed_order_id) || o.breakdown : o.breakdown,
   }))
+}
+
+export type AdvanceSalePaymentSummary = {
+  payments: AdvancePayment[]
+  splitDetails: SplitDetails
+  depositPaid: number
+  balancePaid: number
+  remaining: number
+}
+
+export async function getAdvanceSalePaymentSummaries(saleOrderIds: string[]): Promise<Map<string, AdvanceSalePaymentSummary>> {
+  const summaries = new Map<string, AdvanceSalePaymentSummary>()
+  const ids = [...new Set(saleOrderIds.filter(Boolean))]
+  if (!isSupabaseConfigured || ids.length === 0) return summaries
+
+  const { data: advanceRows, error: advanceError } = await supabase
+    .from('advance_orders')
+    .select('id, completed_order_id, deposit_amount, remaining_balance')
+    .in('completed_order_id', ids)
+  if (advanceError) {
+    console.warn('[getAdvanceSalePaymentSummaries] Advance orders unavailable:', advanceError.message)
+    return summaries
+  }
+
+  const saleIdByAdvanceId = new Map<string, string>()
+  for (const row of advanceRows || []) {
+    if (row.completed_order_id) saleIdByAdvanceId.set(String(row.id), String(row.completed_order_id))
+  }
+  if (saleIdByAdvanceId.size === 0) return summaries
+
+  const { data: paymentRows, error: paymentError } = await supabase
+    .from('advance_order_payments')
+    .select('*')
+    .in('advance_order_id', [...saleIdByAdvanceId.keys()])
+    .order('received_at')
+  if (paymentError) {
+    console.warn('[getAdvanceSalePaymentSummaries] Payment records unavailable:', paymentError.message)
+    return summaries
+  }
+
+  for (const advanceRow of advanceRows || []) {
+    if (!advanceRow.completed_order_id) continue
+    const payments = ((paymentRows || []) as AdvancePayment[]).filter(payment => payment.advance_order_id === String(advanceRow.id))
+    summaries.set(String(advanceRow.completed_order_id), {
+      payments,
+      splitDetails: aggregatePaymentRecords(payments),
+      depositPaid: Number(advanceRow.deposit_amount) || 0,
+      balancePaid: payments.filter(payment => payment.payment_type === 'remaining').reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+      remaining: Number(advanceRow.remaining_balance) || 0,
+    })
+  }
+  return summaries
 }
 
 const rpcRow = (data: unknown) => (Array.isArray(data) ? data[0] : data) as Record<string, unknown>
@@ -311,6 +368,21 @@ export async function createAdvanceOrder(input: {
       received_at: now.toISOString(),
     })
     saveLocalPayments(currentPayments)
+  }
+
+  const depositPayment: AdvancePayment = {
+    id: `${createdOrder.id}_deposit`,
+    advance_order_id: createdOrder.id,
+    payment_type: 'deposit',
+    amount: Number(input.depositAmount),
+    payment_method: input.paymentMethod,
+    split_details: splitDetails,
+    remarks: input.remarks.trim(),
+    received_at: createdOrder.created_at,
+  }
+  createdOrder = {
+    ...createdOrder,
+    payments: createdOrder.payments?.length ? createdOrder.payments : [depositPayment],
   }
 
   const localOrders = loadLocalOrders()

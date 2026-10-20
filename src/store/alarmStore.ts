@@ -63,8 +63,8 @@ export const useAlarmStore = create<AlarmState>()(
 
       setSoundEnabled: (enabled) => {
         set({ soundEnabled: enabled })
+        alarmSound.setSoundEnabled(enabled)
         if (!enabled) {
-          alarmSound.stopAlert()
           return
         }
         const { isAlarmActive, silencedItemIds, lowStockItems } = get()
@@ -93,3 +93,5 @@ export const useAlarmStore = create<AlarmState>()(
     },
   ),
 )
+
+alarmSound.setSoundEnabled(useAlarmStore.getState().soundEnabled)

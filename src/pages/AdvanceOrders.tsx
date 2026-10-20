@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarDays, CheckCircle2, Clock3, Download, Eye, FileText, MessageCircle, PackageCheck, Printer, RefreshCw, Search, X, Trash2 } from 'lucide-react'
 import { formatCurrency } from '../lib/retail'
 import SplitPaymentInputs from '../components/common/SplitPaymentInputs'
-import { emptySplitInput, formatGstRate, formatPaymentLabel, splitInputToDetails, splitTotal, type SplitInputValue } from '../lib/payments'
-import { invoicePdfFileFromElement } from '../lib/invoicePdf'
-import { Invoice, type InvoiceItem } from '../components/Invoice'
+import { emptySplitInput, formatGstRate, formatPaymentLabel, paymentBreakdown, round2, splitInputToDetails, splitTotal, type SplitDetails, type SplitInputValue } from '../lib/payments'
+import { invoicePdfFile } from '../lib/invoicePdf'
 import { printThermalReceipt } from '../lib/thermalPrint'
 import { buildAdvanceDepositWhatsAppMessage, buildProfessionalWhatsAppMessage, publicInvoiceUrl } from '../lib/whatsappMessage'
 import { formatPhoneDisplay, toWhatsAppUrl } from '../lib/phone'
-import { advanceFinancials, advancePaymentLines, advancePaymentText, advanceReceiptPdf, downloadFile, printAdvanceReceipt } from '../lib/advanceReceipt'
+import { advanceFinancials, advancePaymentLines, advanceReceiptPdf, downloadFile, printAdvanceReceipt } from '../lib/advanceReceipt'
 import { useAdminAuthStore, useProductStore } from '../store/store'
 import {
   addAdvanceEvent, completeAdvanceOrder, createAdvanceOrder, getAdvanceOrderHistory, listAdvanceOrders, updateAdvanceStatus, deleteAdvanceOrder,
@@ -65,9 +64,6 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
   const [paymentForm, setPaymentForm] = useState({ method: 'cash' as AdvancePaymentMethod, remarks: '' })
   const [depositSplit, setDepositSplit] = useState<SplitInputValue>(emptySplitInput())
   const [finalSplit, setFinalSplit] = useState<SplitInputValue>(emptySplitInput())
-  const [pdfOrder, setPdfOrder] = useState<AdvanceOrder | null>(null)
-  const [pdfGenerating, setPdfGenerating] = useState(false)
-  const invoicePdfRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -212,12 +208,54 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
         remarksWithCoupon,
         paymentForm.method === 'split' ? splitInputToDetails(finalSplit) : undefined
       )
-      let completed: AdvanceOrder = { ...paymentOrder, status: 'completed', remaining_balance: 0, completed_at: result.completed_at, completed_order_id: result.order_id, invoice_number: result.invoice_no, final_payment_method: paymentForm.method, split_details: result.split_details }
+      const finalPayment: AdvancePayment = {
+        id: `${paymentOrder.id}_remaining`,
+        advance_order_id: paymentOrder.id,
+        payment_type: 'remaining',
+        amount: finalAmount,
+        payment_method: paymentForm.method,
+        split_details: paymentForm.method === 'split' ? splitInputToDetails(finalSplit) : {},
+        remarks: remarksWithCoupon,
+        received_at: result.completed_at,
+      }
+      const collectedPayments = [...(paymentOrder.payments || []).filter(payment => payment.payment_type !== 'remaining'), finalPayment]
+      const collectedDetails = collectedPayments.reduce<SplitDetails>((total, payment) => {
+        const parts = paymentBreakdown(payment.payment_method, payment.split_details, Number(payment.amount))
+        return {
+          cash: round2(total.cash + parts.cash),
+          qr: round2(total.qr + parts.qr),
+          card: round2(total.card + parts.card),
+        }
+      }, { cash: 0, qr: 0, card: 0 })
+      const hasFullCollection = Math.abs(splitTotal(collectedDetails) - Number(paymentOrder.total_amount)) < 0.01
+      const fullCollectionDetails = hasFullCollection
+        ? collectedDetails
+        : result.split_details || paymentOrder.split_details || collectedDetails
+      let completed: AdvanceOrder = {
+        ...paymentOrder,
+        status: 'completed',
+        remaining_balance: 0,
+        completed_at: result.completed_at,
+        completed_order_id: result.order_id,
+        invoice_number: result.invoice_no,
+        final_payment_method: paymentForm.method,
+        split_details: fullCollectionDetails,
+        payments: collectedPayments,
+      }
       // Reload so the receipt/PDF data (payments, discount, GST) and an open drawer reflect the final payment immediately
       try {
         const fresh = await listAdvanceOrders()
         const match = fresh.find(row => row.id === completed.id)
-        if (match) completed = { ...match, status: 'completed', remaining_balance: 0 }
+        if (match) {
+          completed = {
+            ...match,
+            status: 'completed',
+            remaining_balance: 0,
+            split_details: hasFullCollection
+              ? collectedDetails
+              : result.split_details || match.split_details || collectedDetails,
+          }
+        }
         setOrders(fresh.map(row => row.id === completed.id ? completed : row))
       } catch { setOrders(rows => rows.map(row => row.id === completed.id ? completed : row)) }
       if (selected?.id === completed.id) void openDetails(completed)
@@ -229,53 +267,32 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
   }
 
   const productRows = (order: AdvanceOrder) => order.products.length ? order.products : [{ name: order.product_name, quantity: 1, base_price: order.total_amount, line_total: order.total_amount, unit: 'piece', unit_type: 'unit' }]
-  const finalInvoiceItems = (order: AdvanceOrder): InvoiceItem[] => productRows(order).map((item, index) => {
-    const quantity = Number(item.quantity || 1)
-    const basePrice = Number(item.base_price ?? item.price ?? 0)
-    return {
-      id: String(item.product_id ?? item.id ?? index),
-      name: String(item.name || 'Product'),
-      nameTa: typeof item.tamil_name === 'string' ? item.tamil_name : undefined,
-      variant_name: typeof item.variant_name === 'string' ? item.variant_name : null,
-      qty: quantity,
-      quantity,
-      unit: String(item.unit || 'piece'),
-      unit_type: String(item.unit_type || 'unit') as InvoiceItem['unit_type'],
-      base_quantity: Number(item.base_quantity || 1),
-      base_price: basePrice,
-      price: Number(item.price ?? basePrice),
-      line_total: Number(item.line_total ?? quantity * basePrice),
-      note: typeof item.note === 'string' ? item.note : typeof item.description === 'string' ? item.description : null,
-    }
-  })
   const advanceSettlement = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return { depositPaid: fin.deposit, balancePaid: fin.balancePaid, remaining: fin.remaining } }
   const downloadOrderPdf = (order: AdvanceOrder) => {
     if (order.status !== 'completed') {
       downloadFile(advanceReceiptPdf(order))
       return
     }
-    setPdfOrder(order)
-    setPdfGenerating(true)
+    const fin = advanceFinancials(order)
+    downloadFile(invoicePdfFile({
+      invoiceNo: order.invoice_number || order.deposit_id,
+      date: order.completed_at || new Date().toISOString(),
+      customerName: order.customer_name,
+      phone: order.phone,
+      address: order.address,
+      items: productRows(order),
+      subtotal: fin.subtotal,
+      shipping: fin.delivery,
+      discountAmount: fin.couponDiscount,
+      manualDiscountAmount: fin.manualDiscount,
+      gstAmount: fin.cgst + fin.sgst,
+      couponCode: fin.couponCode,
+      paymentLines: advancePaymentLines(order),
+      advance: advanceSettlement(order),
+      total: fin.total,
+    }))
   }
-  useEffect(() => {
-    if (!pdfOrder || !invoicePdfRef.current) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const file = await invoicePdfFileFromElement(invoicePdfRef.current!, pdfOrder.invoice_number || pdfOrder.deposit_id)
-        if (!cancelled) downloadFile(file)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to generate final invoice PDF')
-      } finally {
-        if (!cancelled) {
-          setPdfGenerating(false)
-          setPdfOrder(null)
-        }
-      }
-    })()
-    return () => { cancelled = true }
-  }, [pdfOrder])
-  const printFinal = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return printThermalReceipt({ invoiceNo: order.invoice_number || order.deposit_id, date: order.completed_at || new Date().toISOString(), customerName: order.customer_name, phone: order.phone, items: productRows(order).map(item => ({ name: String(item.name || 'Product'), variant_name: typeof item.variant_name === 'string' ? item.variant_name : null, note: typeof item.note === 'string' ? item.note : typeof item.description === 'string' ? item.description : null, qty: Number(item.quantity || 1), unit: String(item.unit || 'piece'), price: Number(item.base_price || 0), line_total: Number(item.line_total || 0) })), subtotal: fin.subtotal, shipping: fin.delivery, couponCode: fin.couponCode, couponDiscount: fin.couponDiscount, manualDiscount: fin.manualDiscount, totalGst: fin.cgst + fin.sgst, total: fin.total, paymentMode: advancePaymentText(order), advance: advanceSettlement(order) }) }
+  const printFinal = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return printThermalReceipt({ invoiceNo: order.invoice_number || order.deposit_id, date: order.completed_at || new Date().toISOString(), customerName: order.customer_name, phone: order.phone, items: productRows(order).map(item => ({ name: String(item.name || 'Product'), variant_name: typeof item.variant_name === 'string' ? item.variant_name : null, note: typeof item.note === 'string' ? item.note : typeof item.description === 'string' ? item.description : null, qty: Number(item.quantity || 1), unit: String(item.unit || 'piece'), price: Number(item.base_price || 0), line_total: Number(item.line_total || 0) })), subtotal: fin.subtotal, shipping: fin.delivery, couponCode: fin.couponCode, couponDiscount: fin.couponDiscount, manualDiscount: fin.manualDiscount, totalGst: fin.cgst + fin.sgst, total: fin.total, paymentLines: advancePaymentLines(order), advance: advanceSettlement(order) }) }
   const printOrder = (order: AdvanceOrder) => order.status === 'completed' ? printFinal(order) : printAdvanceReceipt(order)
   
   const whatsappDepositReceipt = (order: AdvanceOrder) => {
@@ -504,44 +521,16 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
             <div className="flex justify-between"><span className="text-gray-500">Customer</span><b>{completedOrder.customer_name}</b></div>
             <div className="flex justify-between"><span className="text-gray-500">Phone</span><b>{formatPhoneDisplay(completedOrder.phone)}</b></div>
             <div className="flex items-start justify-between gap-3"><span className="shrink-0 text-gray-500">Payment</span><div className="space-y-0.5 text-right">{advancePaymentLines(completedOrder).map(line => <p key={line} className="font-bold">{line}</p>)}</div></div>
-            <div className="flex justify-between border-t border-gray-200 pt-2"><b>Total Settled</b><b className="text-lg text-emerald-700">{formatCurrency(completedOrder.total_amount)}</b></div>
+            <div className="flex justify-between border-t border-gray-200 pt-2"><b>Total Settled</b><b className="text-lg text-emerald-700">{formatCurrency(advanceFinancials(completedOrder).total)}</b></div>
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Balance Due</span><b className="text-emerald-700">{formatCurrency(advanceFinancials(completedOrder).remaining)}</b></div>
           </div>
           <div className="mt-5 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => printFinal(completedOrder)} className="flex items-center justify-center gap-2 rounded-xl bg-[#7A1F2B] px-3 py-3 text-sm font-black text-[#E8D9B5] hover:opacity-90 cursor-pointer"><Printer size={16}/> Print Receipt</button>
             <button type="button" onClick={() => whatsappInvoice(completedOrder)} className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-3 py-3 text-sm font-black text-white hover:opacity-90 cursor-pointer"><MessageCircle size={16}/> WhatsApp</button>
           </div>
-          <button type="button" disabled={pdfGenerating} onClick={() => downloadOrderPdf(completedOrder)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 cursor-pointer"><Download size={16}/> {pdfGenerating ? 'Generating Final Invoice…' : 'Download Final Invoice PDF'}</button>
+          <button type="button" onClick={() => downloadOrderPdf(completedOrder)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold hover:bg-gray-50 cursor-pointer"><Download size={16}/> Download Final Invoice PDF</button>
           <button type="button" onClick={() => setCompletedOrder(null)} className="mt-2 w-full rounded-xl bg-gray-100 px-3 py-3 text-sm font-black text-gray-600 hover:bg-gray-200 cursor-pointer">Close</button>
         </div>
-      </div>,
-      document.body
-    )}
-
-    {pdfOrder && createPortal(
-      <div ref={invoicePdfRef} aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[680px] bg-white">
-        {(() => {
-          const fin = advanceFinancials(pdfOrder)
-          return (
-            <Invoice
-              invoiceNo={pdfOrder.invoice_number || pdfOrder.deposit_id}
-              date={pdfOrder.completed_at || new Date().toISOString()}
-              customerName={pdfOrder.customer_name}
-              phone={pdfOrder.phone}
-              address={pdfOrder.address}
-              items={finalInvoiceItems(pdfOrder)}
-              subtotal={fin.subtotal}
-              shipping={fin.delivery}
-              deliveryCharge={fin.delivery}
-              discountAmount={fin.couponDiscount}
-              manualDiscountAmount={fin.manualDiscount}
-              gstAmount={fin.cgst + fin.sgst}
-              couponCode={fin.couponCode || undefined}
-              paymentMode={advancePaymentText(pdfOrder)}
-              total={fin.total}
-              status="completed"
-            />
-          )
-        })()}
       </div>,
       document.body
     )}
@@ -673,7 +662,6 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                 ['Created By', selected.created_by_name || '-'],
                 ['Current Status', STATUS_LABELS[selected.status]],
                 ['Invoice Number', selected.invoice_number || 'Not generated'],
-                ['Reference No', selected.reference_number || '—'],
               ].map(([k, v]) => (
                 <div key={k} className="rounded-xl bg-slate-50 p-3 border border-slate-200">
                   <p className="text-[10px] font-black uppercase text-gray-500">{k}</p>

@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf'
 import { BRAND_ADDRESS, BRAND_EN, BRAND_PHONE_DISPLAY, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
 import { LOGO_BASE64 } from './logoBase64'
 import { formatCurrency } from './retail'
-import { formatCollectedPaymentLabel, formatGstRate, formatPaymentLabel, normalizePaymentMode, parseSplit, paymentBreakdown, round2, splitGst, splitGstRates, splitTotal } from './payments'
+import { aggregatePaymentRecords, formatCollectedPaymentLabel, formatGstRate, formatPaymentLabel, formatPaymentRecord, parseSplit, round2, splitGst, splitGstRates, splitTotal } from './payments'
 import { getAdvancePricing, type AdvanceOrder, type AdvancePayment } from '../services/advanceOrderService'
 import { formatPhoneDisplay } from './phone'
 import { printHtmlDocument } from './printHtml'
@@ -44,17 +44,23 @@ export function advanceFinancials(order: AdvanceOrder): AdvanceFinancials {
   return { subtotal, delivery, discount, cgst, sgst, cgstRate: rates?.cgst ?? null, sgstRate: rates?.sgst ?? null, couponCode: pricing?.coupon_code || null, couponDiscount, manualDiscount, total, deposit: order.deposit_amount, balancePaid, remaining, settled: remaining < 0.005, completed }
 }
 
-const paymentLine = (payment: AdvancePayment) => {
-  const kind = payment.payment_type === 'deposit' ? 'Deposit' : 'Final balance'
-  const label = formatPaymentLabel(payment.payment_method, payment.split_details) || String(payment.payment_method || '').toUpperCase()
-  // Split labels already carry the per-channel amounts
-  return normalizePaymentMode(payment.payment_method) === 'split' ? `${kind}: ${label}` : `${kind}: ${label} ${formatCurrency(Number(payment.amount))}`
-}
+const paymentLine = (payment: AdvancePayment) => formatPaymentRecord(payment)
 
 /** One line per payment received (deposit, then final balance), including split breakdowns. */
 export function advancePaymentLines(order: AdvanceOrder): string[] {
-  if (order.payments && order.payments.length) return order.payments.map(paymentLine)
-  if (!order.final_payment_method) return ['Cash']
+  const completed = order.status === 'completed' || Boolean(order.invoice_number)
+  const payments = order.payments || []
+  const recordedTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  const expectedTotal = Number(order.total_amount) || 0
+  if (payments.length && (!completed || Math.abs(recordedTotal - expectedTotal) < 0.01)) {
+    return payments.map(paymentLine)
+  }
+  const storedSplit = parseSplit(order.split_details)
+  if (completed && splitTotal(storedSplit) > 0 && Math.abs(splitTotal(storedSplit) - expectedTotal) < 0.01) {
+    return [`Collected: ${formatCollectedPaymentLabel('split', storedSplit)}`]
+  }
+  if (payments.length) return payments.map(paymentLine)
+  if (!order.final_payment_method) return ['Payment method not recorded']
   if (order.final_payment_method === 'upi') return ['UPI / QR']
   if (order.final_payment_method === 'split') return [formatPaymentLabel('split', order.split_details)]
   return [order.final_payment_method.toUpperCase()]
@@ -62,19 +68,17 @@ export function advancePaymentLines(order: AdvanceOrder): string[] {
 
 export function advancePaymentText(order: AdvanceOrder): string {
   const storedBreakdown = parseSplit(order.split_details)
-  if (splitTotal(storedBreakdown) > 0) return formatCollectedPaymentLabel('split', storedBreakdown)
 
   if (order.payments?.length) {
-    const collected = order.payments.reduce((total, payment) => {
-      const paymentParts = paymentBreakdown(payment.payment_method, payment.split_details, Number(payment.amount))
-      return {
-        cash: round2(total.cash + paymentParts.cash),
-        qr: round2(total.qr + paymentParts.qr),
-        card: round2(total.card + paymentParts.card),
-      }
-    }, { cash: 0, qr: 0, card: 0 })
-    if (splitTotal(collected) > 0) return formatCollectedPaymentLabel('split', collected)
+    const collected = aggregatePaymentRecords(order.payments)
+    const collectedTotal = splitTotal(collected)
+    const expectedTotal = Number(order.total_amount) || 0
+    if (collectedTotal > 0 && (!expectedTotal || Math.abs(collectedTotal - expectedTotal) < 0.01)) {
+      return formatCollectedPaymentLabel('split', collected)
+    }
   }
+
+  if (splitTotal(storedBreakdown) > 0) return formatCollectedPaymentLabel('split', storedBreakdown)
 
   return advancePaymentLines(order).join(' | ')
 }

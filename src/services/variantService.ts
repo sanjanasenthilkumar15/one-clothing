@@ -72,6 +72,8 @@ export async function fetchAllVariants(): Promise<{ data: ProductVariant[]; erro
     .select(VARIANT_COLS)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) return { data: [], error: error.message }
   return {
@@ -83,12 +85,19 @@ export async function fetchAllVariants(): Promise<{ data: ProductVariant[]; erro
 export async function fetchVariantsByProduct(productId: string): Promise<ProductVariant[]> {
   if (!isSupabaseConfigured) return []
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('product_variants')
     .select(VARIANT_COLS)
     .eq('product_id', productId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+
+  if (error) {
+    console.error('[fetchVariantsByProduct] Failed to load variants:', error)
+    throw new Error(error.message)
+  }
 
   return (data || []).map(r => mapVariant(r as Record<string, unknown>))
 }
