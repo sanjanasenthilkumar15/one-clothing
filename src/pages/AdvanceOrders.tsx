@@ -236,6 +236,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
       id: String(item.product_id ?? item.id ?? index),
       name: String(item.name || 'Product'),
       nameTa: typeof item.tamil_name === 'string' ? item.tamil_name : undefined,
+      variant_name: typeof item.variant_name === 'string' ? item.variant_name : null,
       qty: quantity,
       quantity,
       unit: String(item.unit || 'piece'),
@@ -244,7 +245,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
       base_price: basePrice,
       price: Number(item.price ?? basePrice),
       line_total: Number(item.line_total ?? quantity * basePrice),
-      note: typeof item.note === 'string' ? item.note : null,
+      note: typeof item.note === 'string' ? item.note : typeof item.description === 'string' ? item.description : null,
     }
   })
   const advanceSettlement = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return { depositPaid: fin.deposit, balancePaid: fin.balancePaid, remaining: fin.remaining } }
@@ -274,7 +275,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
     })()
     return () => { cancelled = true }
   }, [pdfOrder])
-  const printFinal = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return printThermalReceipt({ invoiceNo: order.invoice_number || order.deposit_id, date: order.completed_at || new Date().toISOString(), customerName: order.customer_name, phone: order.phone, items: productRows(order).map(item => ({ name: String(item.name || 'Product'), qty: Number(item.quantity || 1), unit: String(item.unit || 'piece'), price: Number(item.base_price || 0), line_total: Number(item.line_total || 0) })), subtotal: fin.subtotal, shipping: fin.delivery, couponCode: fin.couponCode, couponDiscount: fin.couponDiscount, manualDiscount: fin.manualDiscount, totalGst: fin.cgst + fin.sgst, total: fin.total, paymentMode: advancePaymentText(order), advance: advanceSettlement(order) }) }
+  const printFinal = (order: AdvanceOrder) => { const fin = advanceFinancials(order); return printThermalReceipt({ invoiceNo: order.invoice_number || order.deposit_id, date: order.completed_at || new Date().toISOString(), customerName: order.customer_name, phone: order.phone, items: productRows(order).map(item => ({ name: String(item.name || 'Product'), variant_name: typeof item.variant_name === 'string' ? item.variant_name : null, note: typeof item.note === 'string' ? item.note : typeof item.description === 'string' ? item.description : null, qty: Number(item.quantity || 1), unit: String(item.unit || 'piece'), price: Number(item.base_price || 0), line_total: Number(item.line_total || 0) })), subtotal: fin.subtotal, shipping: fin.delivery, couponCode: fin.couponCode, couponDiscount: fin.couponDiscount, manualDiscount: fin.manualDiscount, totalGst: fin.cgst + fin.sgst, total: fin.total, paymentMode: advancePaymentText(order), advance: advanceSettlement(order) }) }
   const printOrder = (order: AdvanceOrder) => order.status === 'completed' ? printFinal(order) : printAdvanceReceipt(order)
   
   const whatsappDepositReceipt = (order: AdvanceOrder) => {

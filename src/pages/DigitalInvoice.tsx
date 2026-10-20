@@ -347,6 +347,8 @@ export default function DigitalInvoice() {
       phone: invoice.phone,
       items: (invoice.items || []).map((item: Record<string, unknown>) => ({
         name: item.name || item.product_name,
+        note: typeof item.note === 'string' ? item.note : null,
+        variant_name: typeof item.variant_name === 'string' ? item.variant_name : null,
         qty: item.qty || item.quantity,
         unit: item.unit,
         price: item.price || item.base_price || 0,

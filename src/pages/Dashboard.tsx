@@ -1119,8 +1119,12 @@ export default function Dashboard() {
         price?: number
         base_price?: number
         line_total?: number
+        note?: string | null
+        variant_name?: string | null
       }>).map((item) => ({
         name: item.name || item.product_name || '',
+        note: item.note || null,
+        variant_name: item.variant_name || null,
         qty: item.qty || item.quantity || 0,
         unit: item.unit || '',
         price: item.price || item.base_price || 0,

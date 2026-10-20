@@ -97,6 +97,15 @@ export const formatInvoiceNo = (invNo: unknown): string => {
   return `INV${String(Math.abs(hash) % 89999999 + 10000000)}`
 }
 
+export const formatItemDisplayName = (name: string, ...variants: Array<string | null | undefined>): string => {
+  let displayName = name.trim()
+  for (const variant of variants) {
+    const suffix = String(variant || '').trim()
+    if (!suffix || displayName.toLowerCase() === suffix.toLowerCase() || displayName.toLowerCase().endsWith(` - ${suffix.toLowerCase()}`)) continue
+    displayName = displayName ? `${displayName} - ${suffix}` : suffix
+  }
+  return displayName
+}
 
 
 export const normalizeUnitType = (value: unknown, fallback: UnitType = 'unit'): UnitType => {

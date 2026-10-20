@@ -2,7 +2,7 @@ import { formatPhoneDisplay } from './phone'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
 import { BRAND_ADDRESS, BRAND_EN, BRAND_PHONE_DISPLAY } from './brand'
-import { formatCurrency, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from './retail'
+import { formatCurrency, formatItemDisplayName, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from './retail'
 import { LOGO_BASE64 } from './logoBase64'
 import { formatGstRate, splitGst, splitGstRates } from './payments'
 
@@ -117,20 +117,13 @@ export function createInvoicePdf(data: InvoicePdfData): Blob {
   data.items.forEach((raw, index) => {
     const item = normalizeStructuredOrderItem(raw)
     if (y > 260) { doc.addPage(); y = 20 }
-    const name = item.name || 'Item'
+    const name = formatItemDisplayName(item.name || 'Item', item.variant_name, item.note)
     const nameLines = doc.splitTextToSize(name, 105) as string[]
-    const noteLines = item.note ? doc.splitTextToSize(item.note, 105) as string[] : []
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     doc.setTextColor(ink)
     doc.text(String(index + 1), left + 4, y)
     doc.text(nameLines, left + 14, y)
-    if (noteLines.length) {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      doc.setTextColor(muted)
-      doc.text(noteLines, left + 14, y + nameLines.length * 4)
-    }
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
     doc.setTextColor(muted)
@@ -140,7 +133,7 @@ export function createInvoicePdf(data: InvoicePdfData): Blob {
     doc.setFontSize(8)
     doc.setTextColor(ink)
     doc.text(money(item.line_total), right - 4, y, { align: 'right' })
-    y += Math.max(10, (nameLines.length + noteLines.length) * 4 + 4)
+    y += Math.max(10, nameLines.length * 4 + 4)
     doc.setDrawColor('#F1EBE0')
     doc.line(left, y - 3, right, y - 3)
   })

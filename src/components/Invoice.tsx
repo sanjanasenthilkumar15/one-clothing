@@ -1,6 +1,6 @@
 import React from 'react'
 import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_EN, BRAND_INSTAGRAM, BRAND_PRIMARY_PHONE_DISPLAY, BRAND_ICON } from '../lib/brand'
-import { formatCurrency, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from '../lib/retail'
+import { formatCurrency, formatItemDisplayName, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from '../lib/retail'
 import { formatPhoneDisplay } from '../lib/phone'
 import { formatGstRate, splitGst, splitGstRates } from '../lib/payments'
 
@@ -19,6 +19,7 @@ export interface InvoiceItem {
   line_total?: number
   lineTotal?: number
   note?: string | null
+  variant_name?: string | null
 }
 
 export interface InvoiceProps {
@@ -160,9 +161,8 @@ export const Invoice: React.FC<InvoiceProps> = ({
                 <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '10px 8px', fontSize: 11, color: '#999', verticalAlign: 'top' }}>{idx + 1}</td>
                   <td style={{ padding: '10px 8px', verticalAlign: 'top' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111111' }}>{normalized.name}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111111' }}>{formatItemDisplayName(normalized.name, normalized.variant_name, normalized.note)}</div>
                     {displayName && displayName !== normalized.name && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{displayName}</div>}
-                    {normalized.note && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{normalized.note}</div>}
                     {item.offerPrice && item.price !== item.offerPrice && (
                       <div style={{ fontSize: 10, color: '#aaa', textDecoration: 'line-through', marginTop: 2 }}>MRP ₹{item.price}</div>
                     )}

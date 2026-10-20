@@ -29,6 +29,7 @@ import {
   buildStructuredOrderItem,
   calculateLineTotal,
   formatCurrency,
+  formatItemDisplayName,
   formatQuantityDisplay,
   formatInvoiceNo,
 } from '../lib/retail'
@@ -108,10 +109,8 @@ const makePosItem = (p: Product, qty?: number): PosItem => {
 }
 
 // item.name may already end with the variant ("Shirt - XS"); never append it twice
-const itemDisplayName = (item: { name: string; variantName?: string }) =>
-  item.variantName && !item.name.trim().toLowerCase().endsWith(item.variantName.trim().toLowerCase())
-    ? `${item.name} - ${item.variantName}`
-    : item.name
+const itemDisplayName = (item: { name: string; variantName?: string; note?: string | null }) =>
+  formatItemDisplayName(item.name, item.variantName, item.note)
 
 const recalc = (item: PosItem, nextQty: number): PosItem => {
   const q = Math.max(1, Math.round(nextQty))
@@ -984,7 +983,7 @@ export default function Pos(props: PosProps = {}) {
       date: inv.date,
       customerName: inv.customerName,
       phone: inv.phone,
-      items: inv.items.map(item => ({ name: item.name, qty: item.qty, unit: item.selectedUnit, price: Number(item.basePrice) || 0, line_total: item.lineTotal })),
+      items: inv.items.map(item => ({ name: item.name, note: item.note || null, qty: item.qty, unit: item.selectedUnit, price: Number(item.basePrice) || 0, line_total: item.lineTotal })),
       subtotal: inv.subtotal,
       shipping: inv.shipping,
       couponCode: inv.couponCode,
@@ -1365,17 +1364,17 @@ export default function Pos(props: PosProps = {}) {
                   <div className="md:hidden bg-white border border-gray-200/90 rounded-2xl p-3.5 shadow-sm hover:border-[#C9B79C]/50 transition-all space-y-3">
                     {/* Header Row: Product Name + Trash Delete */}
                     <div className="flex items-start justify-between gap-2.5">
-                      <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
                         {item.source === 'manual' ? (
-                          <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
                             <input
                               type="text"
                               value={item.name}
                               onChange={e => updateItem(item.id, 'name', e.target.value)}
                               placeholder="Enter item name..."
-                              className="w-full px-3 py-1.5 bg-[#FAFAFA] border border-gray-200 rounded-xl text-[14px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
+                              className="min-w-0 flex-1 px-3 py-1.5 bg-[#FAFAFA] border border-gray-200 rounded-xl text-[14px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
                             />
-                            {item.note && <p className="mt-1 px-1 text-xs text-gray-500 break-words">{item.note}</p>}
+                            {item.note && <span className="shrink-0 text-[14px] font-bold text-[#111111]"> - {item.note}</span>}
                           </div>
                         ) : (
                           <div>
@@ -1451,15 +1450,15 @@ export default function Pos(props: PosProps = {}) {
                     {/* Item Name */}
                     <div className="min-w-0 flex items-center gap-2">
                       {item.source === 'manual' ? (
-                        <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
                           <input
                             type="text"
                             value={item.name}
                             onChange={e => updateItem(item.id, 'name', e.target.value)}
                             placeholder="Item name"
-                            className="w-full px-3 py-2 bg-[#FAFAFA] border border-gray-200 rounded-lg text-[13px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
+                            className="min-w-0 flex-1 px-3 py-2 bg-[#FAFAFA] border border-gray-200 rounded-lg text-[13px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
                           />
-                          {item.note && <p className="mt-1 px-1 text-[11px] text-gray-500 break-words">{item.note}</p>}
+                          {item.note && <span className="shrink-0 text-[13px] font-bold text-[#111111]"> - {item.note}</span>}
                         </div>
                       ) : (
                         <div className="px-3 py-2 w-full truncate border border-transparent flex items-center gap-2">

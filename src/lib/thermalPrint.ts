@@ -1,7 +1,11 @@
 import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_EN, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
-import { formatCurrency, formatInvoiceNo } from './retail'
+import { formatCurrency, formatItemDisplayName, formatInvoiceNo } from './retail'
 import { printHtmlDocument } from './printHtml'
 import { formatGstRate, splitGst, splitGstRates } from './payments'
+
+const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+}[char] || char))
 
 export interface ThermalReceiptData {
   invoiceNo: string
@@ -14,6 +18,8 @@ export interface ThermalReceiptData {
     unit?: string
     price: number
     line_total?: number
+    note?: string | null
+    variant_name?: string | null
   }>
   subtotal: number
   shipping: number
@@ -119,10 +125,11 @@ export function printThermalReceipt(data: ThermalReceiptData) {
               const lineTotal = item.line_total ?? (item.qty * item.price)
               const unit = item.unit && item.unit !== 'unit' && item.unit !== 'piece' ? item.unit : ''
               const rateDisplay = `${formatCurrency(item.price)}${unit ? `/${unit}` : ''}`
+              const displayName = escapeHtml(formatItemDisplayName(item.name, item.variant_name, item.note))
               return `
                 <tr>
                   <td style="text-align: left; padding: 3px 2px 3px 0; vertical-align: top; word-break: break-word;">
-                    <div style="font-size: 11px; font-weight: bold; line-height: 1.25;">${item.name}</div>
+                    <div style="font-size: 11px; font-weight: bold; line-height: 1.25;">${displayName}</div>
                     <div style="font-size: 9px; color: #444; margin-top: 1px;">${rateDisplay}</div>
                   </td>
                   <td style="text-align: center; vertical-align: top; padding: 3px 0; font-size: 11px;">
