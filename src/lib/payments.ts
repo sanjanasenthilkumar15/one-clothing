@@ -53,7 +53,7 @@ export function paymentBreakdown(mode: unknown, splitRaw: unknown, amount: numbe
   return result
 }
 
-const inr = (n: number) => `₹${round2(n).toFixed(2)}`
+const inr = (n: number) => `₹${round2(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /** Human readable label, e.g. "Cash", "QR", or "Split (Cash ₹500.00 + QR ₹300.00)". */
 export function formatPaymentLabel(mode: unknown, splitRaw?: unknown): string {
@@ -73,9 +73,37 @@ export function formatPaymentLabel(mode: unknown, splitRaw?: unknown): string {
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : ''
 }
 
+/** Formats all collected payment channels for a final invoice when stored totals are available. */
+export function formatCollectedPaymentLabel(mode: unknown, splitRaw?: unknown): string {
+  const split = parseSplit(splitRaw)
+  const parts: string[] = []
+  if (split.cash > 0) parts.push(`Cash ${inr(split.cash)}`)
+  if (split.qr > 0) parts.push(`QR ${inr(split.qr)}`)
+  if (split.card > 0) parts.push(`Card ${inr(split.card)}`)
+
+  if (parts.length > 1) return `Split (${parts.join(' + ')})`
+  if (parts.length === 1) return parts[0]
+  return formatPaymentLabel(mode, splitRaw)
+}
+
 /** Splits a total GST amount into equal CGST + SGST halves (paise-safe: SGST takes the remainder). */
 export function splitGst(totalGst: number): { cgst: number; sgst: number } {
   const total = round2(Math.max(0, Number(totalGst) || 0))
   const cgst = round2(total / 2)
   return { cgst, sgst: round2(total - cgst) }
+}
+
+/** Derives the split GST rates from the saved tax amount and taxable subtotal. */
+export function splitGstRates(totalGst: number, taxableAmount: number): { cgst: number; sgst: number } | null {
+  const gst = round2(Math.max(0, Number(totalGst) || 0))
+  const taxable = round2(Math.max(0, Number(taxableAmount) || 0))
+  if (gst === 0 || taxable === 0) return null
+
+  const totalRate = round2(gst / taxable * 100)
+  const cgst = round2(totalRate / 2)
+  return { cgst, sgst: round2(totalRate - cgst) }
+}
+
+export function formatGstRate(rate: number): string {
+  return `${Number(rate.toFixed(2))}%`
 }

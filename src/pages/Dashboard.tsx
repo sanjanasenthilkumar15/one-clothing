@@ -5,7 +5,7 @@ import {
   Package, Search, RefreshCw, ShieldCheck, ShieldOff, Trophy,
   MessageCircle, ChevronDown, Eye, FileText, Printer, MoreVertical, X, Layers, Receipt,
   SlidersHorizontal, Tag, Ticket, Percent, CheckCircle2, Info, Sparkles, Banknote, QrCode, CreditCard, Gift, KeyRound } from 'lucide-react'
-import { paymentBreakdown, formatPaymentLabel, splitGst } from '../lib/payments'
+import { paymentBreakdown, formatCollectedPaymentLabel, formatGstRate, formatPaymentLabel, splitGst, splitGstRates } from '../lib/payments'
 
 // Custom Malaysian Ringgit icon — replaces the generic dollar-sign icon
 const RMIcon = ({ size = 16, className = '' }: { size?: number; className?: string }) => (
@@ -1166,7 +1166,7 @@ export default function Dashboard() {
       discountAmount: order.discount_amount,
       manualDiscountAmount: order.manual_discount_amount,
       gstAmount: order.total_gst,
-      paymentMode: formatPaymentLabel(order.payment_mode, order.split_details) || order.payment_mode,
+      paymentMode: formatCollectedPaymentLabel(order.payment_mode, order.split_details) || order.payment_mode,
       total: order.total,
     })
     const url = URL.createObjectURL(file)
@@ -2295,7 +2295,7 @@ export default function Dashboard() {
                           })),
                           subtotal: normalizedItems.reduce((sum, item) => sum + item.line_total, 0),
                           total: getOrderTotal(order),
-                          paymentMode: formatPaymentLabel(order.payment_mode || order.payment_method, order.split_details) || order.payment_mode || order.payment_method,
+                          paymentMode: formatCollectedPaymentLabel(order.payment_mode || order.payment_method, order.split_details) || order.payment_mode || order.payment_method,
                         })
 
                         return (
@@ -3685,6 +3685,7 @@ export default function Dashboard() {
                     {filteredSearchResults.slice(0, 50).map(o => {
                       const billTypeLabel = normalizeOrderType(o.order_type) === 'online_request' ? 'REQUEST' : normalizeOrderType(o.order_type) === 'manual_sale' ? 'MANUAL' : normalizeOrderMode(o.order_mode) === 'online' ? 'ONLINE' : 'OFFLINE'
                       const billTypeClass = normalizeOrderType(o.order_type) === 'online_request' ? 'bg-amber-50 text-amber-800' : normalizeOrderType(o.order_type) === 'manual_sale' ? 'bg-gray-50 text-gray-700' : normalizeOrderMode(o.order_mode) === 'online' ? 'bg-gray-50 text-gray-700' : 'bg-orange-50 text-orange-700'
+                      const gstRates = splitGstRates(o.total_gst, getOrderSubtotal(o) - getOrderDiscount(o))
                       return (
                         <React.Fragment key={o.id}>
                         <tr key={o.id} className="hover:bg-[#FAF7F2] text-center">
@@ -3780,8 +3781,8 @@ export default function Dashboard() {
                                   ['Coupon', o.discount_amount > 0 ? `${o.coupon_code ? `${o.coupon_code} ` : ''}(-${formatCurrency(o.discount_amount)})` : '—'],
                                   ['Manual Discount', o.manual_discount_amount > 0 ? `-${formatCurrency(o.manual_discount_amount)}` : '—'],
                                   ['Delivery', getOrderDelivery(o) > 0 ? formatCurrency(getOrderDelivery(o)) : 'Free'],
-                                  ['CGST', o.total_gst > 0 ? formatCurrency(splitGst(o.total_gst).cgst) : '—'],
-                                  ['SGST', o.total_gst > 0 ? formatCurrency(splitGst(o.total_gst).sgst) : '—'],
+                                  [`CGST${gstRates ? ` (${formatGstRate(gstRates.cgst)})` : ''}`, o.total_gst > 0 ? formatCurrency(splitGst(o.total_gst).cgst) : '—'],
+                                  [`SGST${gstRates ? ` (${formatGstRate(gstRates.sgst)})` : ''}`, o.total_gst > 0 ? formatCurrency(splitGst(o.total_gst).sgst) : '—'],
                                   ['Total', formatCurrency(getOrderTotal(o))],
                                 ].map(([k, v]) => (
                                   <div key={k} className="rounded-lg border border-[#DDD2BE]/60 bg-white px-3 py-2">
@@ -4798,7 +4799,7 @@ export default function Dashboard() {
                     discountAmount={invoicePreviewOrder.discount_amount}
                     manualDiscountAmount={invoicePreviewOrder.manual_discount_amount}
                     gstAmount={invoicePreviewOrder.total_gst}
-                    paymentMode={formatPaymentLabel(invoicePreviewOrder.payment_mode, invoicePreviewOrder.split_details) || invoicePreviewOrder.payment_mode}
+                    paymentMode={formatCollectedPaymentLabel(invoicePreviewOrder.payment_mode, invoicePreviewOrder.split_details) || invoicePreviewOrder.payment_mode}
                     total={invoicePreviewOrder.total}
                     status={invoicePreviewOrder.status}
                   />

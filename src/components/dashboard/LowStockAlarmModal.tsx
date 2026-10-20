@@ -7,6 +7,8 @@ export const LowStockAlarmModal: React.FC = () => {
   const isAlarmActive = useAlarmStore((state) => state.isAlarmActive)
   const lowStockItems = useAlarmStore((state) => state.lowStockItems)
   const silenceAlarm = useAlarmStore((state) => state.silenceAlarm)
+  const soundEnabled = useAlarmStore((state) => state.soundEnabled)
+  const setSoundEnabled = useAlarmStore((state) => state.setSoundEnabled)
   const [isAudioBlocked, setIsAudioBlocked] = useState(() => alarmSound.isBlocked())
 
   useEffect(() => {
@@ -17,6 +19,7 @@ export const LowStockAlarmModal: React.FC = () => {
   }, [])
 
   const handleWakeAudio = () => {
+    if (!soundEnabled) return
     void alarmSound.unlock()
   }
 
@@ -58,26 +61,32 @@ export const LowStockAlarmModal: React.FC = () => {
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              handleWakeAudio()
+              if (soundEnabled) handleWakeAudio()
+              else setSoundEnabled(true)
             }}
             onTouchStart={(e) => {
               e.stopPropagation()
-              handleWakeAudio()
+              if (soundEnabled) handleWakeAudio()
+              else setSoundEnabled(true)
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black tracking-wide shadow-md cursor-pointer transition-transform active:scale-95 shrink-0 ${
-              isAudioBlocked
+              !soundEnabled
+                ? 'bg-white/20 text-white hover:bg-white/30'
+                : isAudioBlocked
                 ? 'bg-yellow-300 hover:bg-yellow-400 text-yellow-950 animate-bounce'
                 : 'bg-white/20 text-white hover:bg-white/30'
             }`}
-            title={isAudioBlocked ? 'Click to enable alarm sound' : 'Play a test beep'}
+            title={!soundEnabled ? 'Enable low stock alert sound' : isAudioBlocked ? 'Click to enable alarm sound' : 'Play a test beep'}
           >
-            <Volume2 className="w-3.5 h-3.5" />
-            <span>{isAudioBlocked ? 'Enable Sound' : 'Test Sound'}</span>
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span>
+              {!soundEnabled ? 'Sound Off' : isAudioBlocked ? 'Enable Sound' : 'Test Sound'}
+            </span>
           </button>
         </div>
 
         {/* Notice Banner if browser audio playback was blocked */}
-        {isAudioBlocked && (
+        {soundEnabled && isAudioBlocked && (
           <div
             onClick={(e) => {
               e.stopPropagation()
@@ -100,7 +109,7 @@ export const LowStockAlarmModal: React.FC = () => {
         {/* Alarm Details Notice */}
         <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center justify-between text-xs text-red-900">
           <p className="font-medium text-[11px]">
-            The audible alarm and visual alert will sound until acknowledged.
+            {soundEnabled ? 'The audible alarm and visual alert will continue until acknowledged.' : 'The visual low-stock alert will remain active; sound is disabled.'}
           </p>
           <span className="font-bold text-[11px] bg-red-200/80 px-2 py-0.5 rounded-lg">
             Item Limits Active

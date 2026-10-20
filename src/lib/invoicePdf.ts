@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas'
 import { BRAND_ADDRESS, BRAND_EN, BRAND_PHONE_DISPLAY } from './brand'
 import { formatCurrency, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from './retail'
 import { LOGO_BASE64 } from './logoBase64'
-import { splitGst } from './payments'
+import { formatGstRate, splitGst, splitGstRates } from './payments'
 
 export type InvoicePdfData = {
   invoiceNo: string
@@ -144,7 +144,11 @@ export function createInvoicePdf(data: InvoicePdfData): Blob {
   if ((data.manualDiscountAmount || 0) > 0) rows.push(['Discount', `-${money(data.manualDiscountAmount || 0)}`, '#C9B79C'])
   if ((data.gstAmount || 0) > 0) {
     const { cgst, sgst } = splitGst(data.gstAmount || 0)
-    rows.push(['CGST', money(cgst), ink], ['SGST', money(sgst), ink])
+    const rates = splitGstRates(data.gstAmount || 0, data.subtotal - (data.discountAmount || 0) - (data.manualDiscountAmount || 0))
+    rows.push(
+      [`CGST${rates ? ` (${formatGstRate(rates.cgst)})` : ''}`, money(cgst), ink],
+      [`SGST${rates ? ` (${formatGstRate(rates.sgst)})` : ''}`, money(sgst), ink],
+    )
   }
   rows.push(['Delivery', (data.shipping || 0) > 0 ? money(data.shipping) : 'FREE', ink])
   doc.setFontSize(9)

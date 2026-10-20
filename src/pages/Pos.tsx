@@ -7,11 +7,12 @@ import {
   RefreshCw, ShoppingBag, MessageCircle,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Wifi, WifiOff, Layers, X, ChevronDown, Power,
-  Edit2, AlertCircle, Check
+  Edit2, AlertCircle, Check, Volume2, VolumeX
 } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useProductStore, useVariantStore, useAdminAuthStore, type Product } from '../store/store'
 import { useNavigationStore } from '../store/navigationStore'
+import { useAlarmStore } from '../store/alarmStore'
 import { barcodeService } from '../services/barcodeService'
 import { normalizeBarcode } from '../lib/barcode'
 import { Invoice } from '../components/Invoice'
@@ -21,7 +22,7 @@ import { uploadInvoicePdf } from '../lib/storage'
 import { createOrderWithStock } from '../services/orderService'
 import { createAdvanceOrder, type AdvanceOrder, type AdvancePaymentMethod } from '../services/advanceOrderService'
 import SplitPaymentInputs from '../components/common/SplitPaymentInputs'
-import { emptySplitInput, formatPaymentLabel, splitGst, splitInputToDetails, splitTotal, type SplitInputValue } from '../lib/payments'
+import { emptySplitInput, formatGstRate, formatPaymentLabel, splitGst, splitGstRates, splitInputToDetails, splitTotal, type SplitInputValue } from '../lib/payments'
 import { printAdvanceReceipt } from '../lib/advanceReceipt'
 import { printThermalReceipt } from '../lib/thermalPrint'
 import {
@@ -141,6 +142,8 @@ export default function Pos(props: PosProps = {}) {
   const l = (en: string, ta: string) => lang === 'ta' ? ta : en
   const navigate = useNavigate()
   const { logout, role } = useAdminAuthStore()
+  const soundEnabled = useAlarmStore(state => state.soundEnabled)
+  const setSoundEnabled = useAlarmStore(state => state.setSoundEnabled)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [billingAdjOpen, setBillingAdjOpen] = useState(false)
 
@@ -178,6 +181,9 @@ export default function Pos(props: PosProps = {}) {
   const [gstInput, setGstInput] = useState('')
   const [gstType, setGstType] = useState<'percent' | 'flat'>('percent')
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [manualItemOpen, setManualItemOpen] = useState(false)
+  const [manualItemForm, setManualItemForm] = useState({ name: '', price: '', quantity: '1', note: '' })
+  const [manualItemError, setManualItemError] = useState('')
   const [depositOpen, setDepositOpen] = useState(false)
   const [depositCreated, setDepositCreated] = useState<AdvanceOrder | null>(null)
   const [depositForm, setDepositForm] = useState({ amount: '', expectedDeliveryDate: '', paymentMethod: 'cash' as AdvancePaymentMethod, address: '', remarks: '' })
@@ -262,6 +268,7 @@ export default function Pos(props: PosProps = {}) {
       ? Math.max(0, Math.round((discountedSubtotal * (Math.max(0, Number(gstInput) || 0) / 100)) * 100) / 100)
       : Math.max(0, Number(gstInput) || 0))
     : 0
+  const gstRates = splitGstRates(totalGst, discountedSubtotal)
   const total = Math.max(0, discountedSubtotal + (Number(shipping || 0) || 0) + totalGst)
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -335,6 +342,59 @@ export default function Pos(props: PosProps = {}) {
       if (!ex) return [makePosItem(product), ...cur]
       return cur.map(i => String(i.id) === String(product.id) ? recalc(i, i.qty + 1) : i)
     })
+  }
+
+  const addManualItem = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = manualItemForm.name.trim()
+    const price = Number(manualItemForm.price)
+    const quantity = Number(manualItemForm.quantity)
+
+    if (!name) {
+      setManualItemError('Enter an item name.')
+      return
+    }
+    if (manualItemForm.price.trim() === '' || !Number.isFinite(price) || price < 0) {
+      setManualItemError('Enter a valid price of 0 or more.')
+      return
+    }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setManualItemError('Enter a whole quantity of at least 1.')
+      return
+    }
+
+    const product: Product = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name,
+      category: 'Unregistered',
+      remedy: [],
+      price,
+      offerPrice: null,
+      unitType: 'unit',
+      unitLabel: 'piece',
+      baseQuantity: 1,
+      stockQuantity: 999999,
+      stockUnit: 'piece',
+      allowDecimalQuantity: false,
+      predefinedOptions: [],
+      isActive: true,
+      sortOrder: 0,
+      unit: '1pc',
+      rating: 5,
+      stock: 999999,
+      description: '',
+      benefits: '',
+      image: '/product-placeholder.svg',
+      source: 'manual',
+      note: manualItemForm.note.trim() || null,
+    }
+    const item = makePosItem(product, quantity)
+    item.note = product.note
+    setItems(current => [item, ...current])
+    setMobilePanelView('catalogue')
+    setManualItemForm({ name: '', price: '', quantity: '1', note: '' })
+    setManualItemError('')
+    setManualItemOpen(false)
   }
 
   const addVariantToItems = () => {
@@ -1092,6 +1152,21 @@ export default function Pos(props: PosProps = {}) {
 
         {/* Online/Offline Toggle & Logout */}
         <div className="flex gap-2 w-full min-[480px]:w-auto">
+          <button
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            aria-pressed={soundEnabled}
+            aria-label={`Low stock alert sound ${soundEnabled ? 'on' : 'off'}`}
+            title={`Low stock alert sound ${soundEnabled ? 'on' : 'off'}`}
+            className={`flex min-h-[38px] items-center justify-center gap-2 rounded-xl border px-3 text-[11px] font-black transition-colors sm:min-h-[42px] ${
+              soundEnabled
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 sm:px-3'
+                : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <span className="hidden whitespace-nowrap sm:inline">Stock Sound {soundEnabled ? 'On' : 'Off'}</span>
+          </button>
           <div className="grid grid-cols-2 bg-white rounded-xl border border-gray-200 p-1 shadow-sm flex-1 min-[480px]:flex-none">
             <button
               onClick={() => setOrdermode('offline')}
@@ -1252,6 +1327,17 @@ export default function Pos(props: PosProps = {}) {
                 >
                   <Search className="w-3.5 h-3.5 text-[#7A6A4F]" />
                   <span className="tracking-wide">Search Catalog</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualItemError('')
+                    setManualItemOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 sm:px-3.5 text-[11px] font-bold rounded-lg bg-[#E87900] text-white hover:bg-[#D16D00] transition-colors shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="tracking-wide">Add Item</span>
                 </button>
               </div>
             </div>
@@ -1629,12 +1715,16 @@ export default function Pos(props: PosProps = {}) {
                 {billGstEnabled && totalGst > 0 && (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black text-[#374151]">CGST</span>
-                      <span className="text-[12px] font-black text-[#111111]">{formatCurrency(splitGst(totalGst).cgst)}</span>
+                      <span className="text-[11px] font-black text-[#374151]">GST Amount{gstRates ? ` (${formatGstRate(gstRates.cgst + gstRates.sgst)})` : ''}</span>
+                      <span className="text-[12px] font-black text-[#111111]">+{formatCurrency(totalGst)}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black text-[#374151]">SGST</span>
-                      <span className="text-[12px] font-black text-[#111111]">{formatCurrency(splitGst(totalGst).sgst)}</span>
+                    <div className="flex items-center justify-between pl-2">
+                      <span className="text-[10px] font-bold text-[#6B7280]">CGST{gstRates ? ` (${formatGstRate(gstRates.cgst)})` : ''}</span>
+                      <span className="text-[11px] font-bold text-[#6B7280]">+{formatCurrency(splitGst(totalGst).cgst)}</span>
+                    </div>
+                    <div className="flex items-center justify-between pl-2">
+                      <span className="text-[10px] font-bold text-[#6B7280]">SGST{gstRates ? ` (${formatGstRate(gstRates.sgst)})` : ''}</span>
+                      <span className="text-[11px] font-bold text-[#6B7280]">+{formatCurrency(splitGst(totalGst).sgst)}</span>
                     </div>
                   </>
                 )}
@@ -1788,6 +1878,119 @@ export default function Pos(props: PosProps = {}) {
             <div className="mt-5 grid grid-cols-2 gap-2"><button onClick={() => printAdvanceReceipt(depositCreated)} className="rounded-xl border border-gray-200 py-3 text-sm font-black text-gray-700"><Printer size={16} className="mr-1 inline"/>Print Receipt</button><button onClick={() => { const msg = buildAdvanceDepositWhatsAppMessage({ customerName: depositCreated.customer_name, depositId: depositCreated.deposit_id, productName: depositCreated.product_name, totalAmount: depositCreated.total_amount, depositAmount: depositCreated.deposit_amount, remainingBalance: depositCreated.remaining_balance, expectedDeliveryDate: depositCreated.expected_delivery_date }); window.open(toWhatsAppUrl(depositCreated.phone, msg), '_blank', 'noopener,noreferrer') }} className="rounded-xl bg-[#25D366] py-3 text-sm font-black text-white"><MessageCircle size={16} className="mr-1 inline -mt-0.5"/>WhatsApp</button></div>
             <button onClick={() => { setDepositCreated(null); searchRef.current?.focus() }} className="mt-3 w-full rounded-xl bg-[#111111] py-3 text-sm font-black text-white">Start New Order</button>
           </div>
+        </div>
+      )}
+
+      {manualItemOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <form
+            onSubmit={addManualItem}
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-[#DDD2BE] bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-item-title"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-[#E87900]">
+                  <Plus size={17} />
+                </div>
+                <div>
+                  <h3 id="manual-item-title" className="text-sm font-black text-gray-900">Add Ad-Hoc Item</h3>
+                  <p className="text-[11px] font-semibold text-gray-500">Direct billing without inventory check</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualItemOpen(false)}
+                aria-label="Close add item dialog"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div>
+                <label htmlFor="manual-item-name" className="mb-1 block text-xs font-bold text-gray-700">Item Name *</label>
+                <input
+                  id="manual-item-name"
+                  autoFocus
+                  required
+                  type="text"
+                  value={manualItemForm.name}
+                  onChange={event => setManualItemForm(form => ({ ...form, name: event.target.value }))}
+                  placeholder="e.g. Alteration Charge, Custom Dupatta"
+                  className="h-9 w-full rounded-xl border border-gray-300 px-3 text-xs font-semibold text-gray-900 outline-none placeholder:text-gray-400 focus:border-[#C9B79C]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="manual-item-price" className="mb-1 block text-xs font-bold text-gray-700">Price (₹) *</label>
+                  <input
+                    id="manual-item-price"
+                    required
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={manualItemForm.price}
+                    onChange={event => setManualItemForm(form => ({ ...form, price: event.target.value }))}
+                    placeholder="0.00"
+                    className="h-9 w-full rounded-xl border border-gray-200 bg-[#FAFAF8] px-3 text-xs font-semibold text-gray-900 outline-none placeholder:text-gray-400 focus:border-[#C9B79C] focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="manual-item-quantity" className="mb-1 block text-xs font-bold text-gray-700">Quantity *</label>
+                  <input
+                    id="manual-item-quantity"
+                    required
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={manualItemForm.quantity}
+                    onChange={event => setManualItemForm(form => ({ ...form, quantity: event.target.value }))}
+                    className="h-9 w-full rounded-xl border border-gray-200 bg-[#FAFAF8] px-3 text-xs font-semibold text-gray-900 outline-none focus:border-[#C9B79C] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="manual-item-note" className="mb-1 block text-xs font-bold text-gray-700">Variant / Notes / Size (Optional)</label>
+                <input
+                  id="manual-item-note"
+                  type="text"
+                  value={manualItemForm.note}
+                  onChange={event => setManualItemForm(form => ({ ...form, note: event.target.value }))}
+                  placeholder="e.g. Size 38, Maroon, Urgent Stitching"
+                  className="h-9 w-full rounded-xl border border-gray-200 bg-[#FAFAF8] px-3 text-xs font-semibold text-gray-900 outline-none placeholder:text-gray-400 focus:border-[#C9B79C] focus:bg-white"
+                />
+              </div>
+
+              <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-800">
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                <p>This item will be billed without checking or deducting inventory stock. It is tagged as Unregistered.</p>
+              </div>
+              {manualItemError && <p role="alert" className="text-xs font-semibold text-red-600">{manualItemError}</p>}
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 pb-5">
+              <button
+                type="button"
+                onClick={() => setManualItemOpen(false)}
+                className="h-9 rounded-lg border border-gray-200 px-4 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#111111] px-4 text-xs font-bold text-[#E0A900] hover:bg-[#262626]"
+              >
+                <Plus size={14} />
+                Add to Bill
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

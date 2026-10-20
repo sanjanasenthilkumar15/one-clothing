@@ -1,7 +1,7 @@
 import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_EN, BRAND_PRIMARY_PHONE_DISPLAY } from './brand'
 import { formatCurrency, formatInvoiceNo } from './retail'
 import { printHtmlDocument } from './printHtml'
-import { splitGst } from './payments'
+import { formatGstRate, splitGst, splitGstRates } from './payments'
 
 export interface ThermalReceiptData {
   invoiceNo: string
@@ -52,6 +52,7 @@ export function printThermalReceipt(data: ThermalReceiptData) {
     }
 
     const gstParts = splitGst(data.totalGst || 0)
+    const gstRates = splitGstRates(data.totalGst || 0, data.subtotal - (data.couponDiscount || 0) - (data.manualDiscount || 0))
     const html = `
       <!DOCTYPE html>
       <html lang="en" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" spellcheck="false">
@@ -156,11 +157,11 @@ export function printThermalReceipt(data: ThermalReceiptData) {
             ` : ''}
             ${(data.totalGst || 0) > 0 ? `
               <tr>
-                <td class="text-left">CGST</td>
+                <td class="text-left">CGST${gstRates ? ` (${formatGstRate(gstRates.cgst)})` : ''}</td>
                 <td class="text-right">+${formatCurrency(gstParts.cgst)}</td>
               </tr>
               <tr>
-                <td class="text-left">SGST</td>
+                <td class="text-left">SGST${gstRates ? ` (${formatGstRate(gstRates.sgst)})` : ''}</td>
                 <td class="text-right">+${formatCurrency(gstParts.sgst)}</td>
               </tr>
             ` : ''}

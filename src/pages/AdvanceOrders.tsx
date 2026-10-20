@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { CalendarDays, CheckCircle2, Clock3, Download, Eye, FileText, MessageCircle, PackageCheck, Printer, RefreshCw, Search, X, Trash2 } from 'lucide-react'
 import { formatCurrency } from '../lib/retail'
 import SplitPaymentInputs from '../components/common/SplitPaymentInputs'
-import { emptySplitInput, formatPaymentLabel, splitInputToDetails, splitTotal, type SplitInputValue } from '../lib/payments'
+import { emptySplitInput, formatGstRate, formatPaymentLabel, splitInputToDetails, splitTotal, type SplitInputValue } from '../lib/payments'
 import { invoicePdfFile } from '../lib/invoicePdf'
 import { printThermalReceipt } from '../lib/thermalPrint'
 import { buildAdvanceDepositWhatsAppMessage, buildProfessionalWhatsAppMessage, publicInvoiceUrl } from '../lib/whatsappMessage'
@@ -280,7 +280,7 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
   )
 
   const renderActions = (order: AdvanceOrder) => (
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex w-max flex-nowrap items-center gap-1 whitespace-nowrap">
               {/* Receive Balance Button (strictly when no invoice exists, not completed, not cancelled, and pending/ready) */}
               {!order.invoice_number &&
                 !order.completed_order_id &&
@@ -623,8 +623,8 @@ export default function AdvanceOrders({ onOrderCompleted }: AdvanceOrdersProps =
                     {cell('Subtotal', formatCurrency(fin.subtotal))}
                     {fin.couponDiscount > 0 && cell(fin.couponCode ? `Coupon (${fin.couponCode})` : 'Coupon', `-${formatCurrency(fin.couponDiscount)}`)}
                     {fin.manualDiscount > 0 && cell('Manual Discount', `-${formatCurrency(fin.manualDiscount)}`)}
-                    {fin.cgst + fin.sgst > 0 && cell('CGST', formatCurrency(fin.cgst))}
-                    {fin.cgst + fin.sgst > 0 && cell('SGST', formatCurrency(fin.sgst))}
+                    {fin.cgst + fin.sgst > 0 && cell(`CGST${fin.cgstRate === null ? '' : ` (${formatGstRate(fin.cgstRate)})`}`, formatCurrency(fin.cgst))}
+                    {fin.cgst + fin.sgst > 0 && cell(`SGST${fin.sgstRate === null ? '' : ` (${formatGstRate(fin.sgstRate)})`}`, formatCurrency(fin.sgst))}
                     {cell('Delivery Charges', fin.delivery > 0 ? formatCurrency(fin.delivery) : 'Free (₹0)')}
                     {cell('Total Amount', formatCurrency(fin.total), true)}
                   </div>

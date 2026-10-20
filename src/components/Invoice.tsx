@@ -2,7 +2,7 @@ import React from 'react'
 import { BRAND_ADDRESS, BRAND_EMAIL, BRAND_EN, BRAND_INSTAGRAM, BRAND_PRIMARY_PHONE_DISPLAY, BRAND_ICON } from '../lib/brand'
 import { formatCurrency, formatQuantityDisplay, normalizeStructuredOrderItem, formatInvoiceNo } from '../lib/retail'
 import { formatPhoneDisplay } from '../lib/phone'
-import { splitGst } from '../lib/payments'
+import { formatGstRate, splitGst, splitGstRates } from '../lib/payments'
 
 export interface InvoiceItem {
   id: string | number
@@ -69,6 +69,7 @@ export const Invoice: React.FC<InvoiceProps> = ({
   const statusColor = status === 'completed' ? '#C9B79C' : status === 'cancelled' ? '#dc2626' : '#d97706'
   const effectiveDelivery = deliveryCharge || shipping
   const { cgst, sgst } = splitGst(gstAmount)
+  const gstRates = splitGstRates(gstAmount, subtotal - discountAmount - manualDiscountAmount)
 
   return (
     <div
@@ -119,8 +120,8 @@ export const Invoice: React.FC<InvoiceProps> = ({
           </div>
           {paymentMode && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase' }}>Payment Mode</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase' }}>{paymentMode}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase' }}>Payment Details</span>
+              <span style={{ maxWidth: '68%', fontSize: 10, fontWeight: 800, color: '#16a34a', textAlign: 'right', overflowWrap: 'anywhere' }}>{paymentMode}</span>
             </div>
           )}
         </div>
@@ -132,7 +133,6 @@ export const Invoice: React.FC<InvoiceProps> = ({
           <div style={{ fontSize: 9, fontWeight: 800, color: '#888', textTransform: 'uppercase', letterSpacing: 0.7, marginTop: 6 }}>Mobile Number</div>
           <div style={{ fontSize: 12, color: '#555', lineHeight: 1.4, wordBreak: 'break-word' }}>{formatPhoneDisplay(phone) || '—'}</div>
           {address && <div style={{ fontSize: 11, color: '#777', marginTop: 4, lineHeight: 1.4, wordBreak: 'break-word' }}>{address}</div>}
-          {paymentMode && <div style={{ fontSize: 10, color: '#777', marginTop: 4 }}>Payment Mode: {paymentMode}</div>}
         </div>
       </div>
 
@@ -203,11 +203,11 @@ export const Invoice: React.FC<InvoiceProps> = ({
             {gstAmount > 0 && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: '#666' }}>CGST</span>
+                  <span style={{ fontSize: 12, color: '#666' }}>CGST{gstRates ? ` (${formatGstRate(gstRates.cgst)})` : ''}</span>
                   <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+{formatCurrency(cgst)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: '#666' }}>SGST</span>
+                  <span style={{ fontSize: 12, color: '#666' }}>SGST{gstRates ? ` (${formatGstRate(gstRates.sgst)})` : ''}</span>
                   <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+{formatCurrency(sgst)}</span>
                 </div>
               </>

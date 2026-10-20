@@ -9,7 +9,7 @@ import { uploadInvoicePdf } from '../lib/storage'
 import { isUuid, normalizeStructuredOrderItem, formatInvoiceNo } from '../lib/retail'
 import { buildProfessionalWhatsAppMessage } from '../lib/whatsappMessage'
 import { toWhatsAppUrl } from '../lib/phone'
-import { formatPaymentLabel } from '../lib/payments'
+import { formatCollectedPaymentLabel } from '../lib/payments'
 
 function buildLookupCandidates(id: string): string[] {
   const raw = decodeURIComponent(id || '').trim()
@@ -305,7 +305,7 @@ export default function DigitalInvoice() {
       shipping: invoice.delivery_charge,
       gstAmount: invoice.total_gst || invoice.gst_amount || 0,
       total: invoice.total,
-      paymentMode: formatPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method,
+      paymentMode: formatCollectedPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method,
     })
 
     const invoiceUrl = window.location.href
@@ -406,7 +406,7 @@ export default function DigitalInvoice() {
             couponCode={invoice.coupon_code}
             total={invoice.total > 0 ? invoice.total : (subtotal + (invoice.delivery_charge || 0) + (invoice.total_gst || invoice.gst_amount || 0) - (invoice.discount_amount || 0) - (invoice.manual_discount_amount || 0))}
             status={invoice.status}
-            paymentMode={formatPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method}
+            paymentMode={formatCollectedPaymentLabel(invoice.payment_mode || invoice.payment_method, invoice.split_details) || invoice.payment_mode || invoice.payment_method}
           />
         </div>
       </div>
