@@ -958,7 +958,7 @@ export default function Pos(props: PosProps = {}) {
         customerName: inv.customerName,
         phone: inv.phone,
         address: inv.address,
-        items: inv.items.map(item => ({ name: item.name, qty: item.qty, unit: item.selectedUnit, price: Number(item.basePrice) || 0, line_total: item.lineTotal })),
+        items: inv.items.map(item => ({ name: item.name, qty: item.qty, unit: item.selectedUnit, price: Number(item.basePrice) || 0, line_total: item.lineTotal, note: item.note || null })),
         subtotal: inv.subtotal,
         shipping: inv.shipping,
         discountAmount: inv.couponDiscount,
@@ -1010,6 +1010,7 @@ export default function Pos(props: PosProps = {}) {
       line_total: item.lineTotal,
       price: item.price,
       offerPrice: item.offerPrice ?? undefined,
+      note: item.note || null,
     }))
 
     return (
@@ -1366,13 +1367,16 @@ export default function Pos(props: PosProps = {}) {
                     <div className="flex items-start justify-between gap-2.5">
                       <div className="min-w-0 flex-1">
                         {item.source === 'manual' ? (
-                          <input
-                            type="text"
-                            value={item.name}
-                            onChange={e => updateItem(item.id, 'name', e.target.value)}
-                            placeholder="Enter item name..."
-                            className="w-full px-3 py-1.5 bg-[#FAFAFA] border border-gray-200 rounded-xl text-[14px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
-                          />
+                          <div className="min-w-0 flex-1">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={e => updateItem(item.id, 'name', e.target.value)}
+                              placeholder="Enter item name..."
+                              className="w-full px-3 py-1.5 bg-[#FAFAFA] border border-gray-200 rounded-xl text-[14px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
+                            />
+                            {item.note && <p className="mt-1 px-1 text-xs text-gray-500 break-words">{item.note}</p>}
+                          </div>
                         ) : (
                           <div>
                             <h4 className="text-[14px] font-bold text-[#111111] leading-snug break-words">
@@ -1447,13 +1451,16 @@ export default function Pos(props: PosProps = {}) {
                     {/* Item Name */}
                     <div className="min-w-0 flex items-center gap-2">
                       {item.source === 'manual' ? (
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={e => updateItem(item.id, 'name', e.target.value)}
-                          placeholder="Item name"
-                          className="w-full px-3 py-2 bg-[#FAFAFA] border border-gray-200 rounded-lg text-[13px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
-                        />
+                        <div className="min-w-0 flex-1">
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={e => updateItem(item.id, 'name', e.target.value)}
+                            placeholder="Item name"
+                            className="w-full px-3 py-2 bg-[#FAFAFA] border border-gray-200 rounded-lg text-[13px] font-bold text-[#111111] focus:outline-none focus:border-[#C9B79C]"
+                          />
+                          {item.note && <p className="mt-1 px-1 text-[11px] text-gray-500 break-words">{item.note}</p>}
+                        </div>
                       ) : (
                         <div className="px-3 py-2 w-full truncate border border-transparent flex items-center gap-2">
                           <span className="text-[13px] font-bold text-[#111111] truncate">{itemDisplayName(item)}</span>

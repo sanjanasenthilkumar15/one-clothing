@@ -18,6 +18,7 @@ export interface InvoiceItem {
   offerPrice?: number | null
   line_total?: number
   lineTotal?: number
+  note?: string | null
 }
 
 export interface InvoiceProps {
@@ -161,6 +162,7 @@ export const Invoice: React.FC<InvoiceProps> = ({
                   <td style={{ padding: '10px 8px', verticalAlign: 'top' }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#111111' }}>{normalized.name}</div>
                     {displayName && displayName !== normalized.name && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{displayName}</div>}
+                    {normalized.note && <div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{normalized.note}</div>}
                     {item.offerPrice && item.price !== item.offerPrice && (
                       <div style={{ fontSize: 10, color: '#aaa', textDecoration: 'line-through', marginTop: 2 }}>MRP ₹{item.price}</div>
                     )}
