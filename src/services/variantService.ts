@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { normalizeBarcode } from '../lib/barcode'
 
 export type ProductVariant = {
   id: string
@@ -159,7 +160,42 @@ export async function updateVariant(
     .update(payload)
     .eq('id', id)
 
-  return { error: error?.message ?? null }
+  if (error) return { error: error.message }
+
+  if (updates.barcode !== undefined) {
+    const { error: deactivateError } = await supabase
+      .from('barcode_registry')
+      .update({ is_active: false })
+      .eq('variant_id', id)
+      .eq('is_active', true)
+    if (deactivateError) return { error: deactivateError.message }
+
+    const barcode = normalizeBarcode(updates.barcode)
+    if (barcode) {
+      let productId = updates.productId
+      if (!productId) {
+        const { data: variant, error: variantError } = await supabase
+          .from('product_variants')
+          .select('product_id')
+          .eq('id', id)
+          .single()
+        if (variantError || !variant) return { error: variantError?.message || 'Unable to resolve the variant product.' }
+        productId = String(variant.product_id)
+      }
+      const { error: barcodeError } = await supabase.from('barcode_registry').upsert(
+        {
+          barcode_value: barcode,
+          product_id: productId,
+          variant_id: id,
+          is_active: true,
+        },
+        { onConflict: 'barcode_value' }
+      )
+      if (barcodeError) return { error: barcodeError.message }
+    }
+  }
+
+  return { error: null }
 }
 
 export async function deleteVariant(id: string): Promise<{ error: string | null }> {

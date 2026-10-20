@@ -136,7 +136,7 @@ type PosProps = {
 export default function Pos(props: PosProps = {}) {
   const embeddedMode = Boolean(props.isEmbedded)
   const { products, fetchProducts } = useProductStore()
-  const { getVariants, fetchVariants } = useVariantStore()
+  const { fetchVariants } = useVariantStore()
   const { lang } = useLangStore()
   const l = (en: string, ta: string) => lang === 'ta' ? ta : en
   const navigate = useNavigate()
